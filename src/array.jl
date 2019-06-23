@@ -33,7 +33,7 @@ end
 Line `separate` but in place, returning two views into `A` where first view has all the `true` second all the `false`.
 This rearranges `A`.
 """
-@export function separate(f::Function, A::AbstractVector)
+@export function separate!(f::Function, A::AbstractVector)
 	tf = x -> f(x) ? 0 : 1
 	sort!(A, by=tf)
 	false_id = findfirst(!f, A)
