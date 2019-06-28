@@ -19,7 +19,6 @@ fillall!(ts2, 1.0)
 
 ts2 .*= 3.0
 @test all(ts2.caches[1] .== 3.0)
-nthreads() > 1 && @test all(ts2.caches[3] .== 1.0)
 
 
 fillall!(ts2, 1.0)
