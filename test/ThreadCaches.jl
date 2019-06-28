@@ -15,7 +15,7 @@ end
 @test all(gather(ts2) .== ts)
 
 fillall!(ts2, 1.0)
-@test all(ts2.caches[3] .== 1.0)
+@test all(ts2.caches[1] .== 1.0)
 
 ts2 .*= 3.0
 @test all(ts2.caches[1] .== 3.0)
