@@ -3,6 +3,8 @@ uuid = "81de72d6-94f4-11e9-3d35-4feaf5d5fb7f"
 authors = ["Louis Ponet <louisponet@gmail.com>"]
 repo = "https://github.com/louisponet/StdLib.jl.git"
 version = "0.0.0"
+
 [deps]
 InlineExports = "809d7502-0c9d-5bc2-962a-5201dc498f73"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"

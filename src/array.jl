@@ -1,5 +1,5 @@
 """
-It's like filter()[1].
+Like `filter()[1]`.
 """
 @export function getfirst(f::Function, A)
     for el in A
@@ -30,7 +30,7 @@ end
 """
 	separate!(f::Function, A::AbstractVector)
 
-Line `separate` but in place, returning two views into `A` where first view has all the `true` second all the `false`.
+Like `separate` but in place, returning two views into `A` where first view has all the `true` second all the `false`.
 This rearranges `A`.
 """
 @export function separate!(f::Function, A::AbstractVector)
@@ -40,4 +40,16 @@ This rearranges `A`.
 	return view(A, 1:false_id-1), view(A, false_id:length(A))
 end
 
+"""
+	fillcopy(x, dims...)
+
+Fills an array with deep copies of x.
+"""
+@export function fillcopy(x::T, dims...) where T
+	out = Array{T, length(dims)}(undef, dims...)
+	for i in eachindex(out)
+		out[i] = deepcopy(x)
+	end
+	return out
+end
 
