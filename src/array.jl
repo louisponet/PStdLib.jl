@@ -10,37 +10,57 @@ Like `filter()[1]`.
 end
 
 """
+	separate!(f::Function, A::AbstractVector, ix::AbstractVector{Int}=Vector{Int}(undef, length(A)))
+
+Like `separate` but in place, `ix` is a id buffer that will be used in `separateperm!`, of at least length of `A`. 
+"""
+@export function separate!(f::Function, A::AbstractVector, ix::AbstractVector{Int}=Vector{Int}(undef, length(A)))
+	ix, id = separateperm!(f, ix, A)
+	permute!(A, ix)
+	return A, id
+end
+
+"""
 	separate(f::Function, A::AbstractVector{T})
 
-Separates array `A` into two arrays, one where `f` is `true`, the other where `f` is false.
+Returns an `array` and `index` where `arra[1:index-1]` holds all the values of `A` for which `f` returns `true`, and `array[index:end]` holds those for which `f` returns `false`.
 """
-@export function separate(f::Function, A::AbstractVector{T}) where T
-    true_part = T[]
-    false_part = T[]
-    for t in A
-        if f(t)
-            push!(true_part, t)
-        else
-            push!(false_part, t)
-        end
-    end
-    return true_part, false_part
-end
- 
-"""
-	separate!(f::Function, A::AbstractVector)
+@export separate(f::Function, A::AbstractVector) =
+	separate!(f, deepcopy(A))
 
-Like `separate` but in place, returning two views into `A` where first view has all the `true` second all the `false`.
-This rearranges `A`.
 """
-@export function separate!(f::Function, A::AbstractVector)
-	true_counter = 1
-	false_counter = -1
-	tf = x -> f(x) ? (true_counter += 1; true_counter) : (false_counter -= 1; false_counter)
-	sort!(A, by=tf)
-	false_id = findfirst(!f, A)
-	return view(A, 1:false_id-1), view(A, false_id:length(A))
+	separateperm!(f::Function, ix::AbstractVector{Int}, A::AbstractVector)
+
+Like `separateperm` but accepts a preallocated index vector `ix`.
+"""
+@export function separateperm!(f::Function, ix::AbstractVector{Int}, A::AbstractVector)
+	cur_id = 1
+	la = length(A)
+	@assert la <= length(ix) "Please supply an id vector that is of sufficient length (at least $la)."
+	true_id = 1
+	false_id = 0
+	for (i, a) in enumerate(A)
+		if f(a)
+			ix[true_id] = i
+			true_id += 1
+		else
+			ix[end - false_id] = i
+			false_id += 1
+		end
+	end
+	reverse!(ix, true_id, la), true_id 
 end
+
+"""
+	separateperm(f::Function, A::AbstractVector)
+
+Returns a `Vector{Int}` that can be used with `permute!` to separate `A` into values for which `f` returns `true` and those for which `f` returns `false`, and the first index where `f` returns false.
+"""
+@export function separateperm(f::Function, A::AbstractVector)
+	ix = Vector{Int}(undef, length(A))
+	return separateperm!(f, ix, A)
+end
+
 
 """
 	fillcopy(x, dims...)
