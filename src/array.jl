@@ -55,7 +55,7 @@ Like `separateperm` but accepts a preallocated index vector `ix`.
 			false_id += 1
 		end
 	end
-	reverse!(ix, true_id, la), true_id 
+	reverse!(ix, true_id, la), true_id
 end
 
 """

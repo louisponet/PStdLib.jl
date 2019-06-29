@@ -61,3 +61,34 @@ for i = 1:nthreads()
 	@test all(ts3.caches[i] .== 900)
 end
 
+ts2 = ThreadCache(ones(100, 100))
+@test ts2 * 5 == 5*ts2 == 5*ones(100, 100)
+
+t = 1im * ones(100, 100)
+ts2 = ThreadCache(zeros(ComplexF64, 100, 100))
+
+adjoint!(ts2, t)
+@test PStdLib.ThreadCaches.cache(ts2) == adjoint(t)
+
+ts2 = ThreadCache(t)
+ts3 = ThreadCache(t)
+adjoint!(ts2, adjoint!(ts3, ts2))
+
+@test PStdLib.ThreadCaches.cache(ts2) == t
+
+@test adjoint(ts2) == adjoint(t)
+
+@test ndims(typeof(ts2)) == ndims(typeof(t))
+
+
+
+
+
+
+
+
+
+
+
+
+

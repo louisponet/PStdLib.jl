@@ -3,8 +3,8 @@ module ThreadCaches
 	using InlineExports
 	using Base.Threads
 
-	import Base: +, -, *, /, @propagate_inbounds
-	import LinearAlgebra: mul!, adjoint!
+	import Base: +, -, *, /, @propagate_inbounds, ndims
+	import LinearAlgebra: mul!, adjoint!, adjoint
 
 	"""
 		ThreadCache{T}
@@ -59,7 +59,7 @@ module ThreadCaches
 	adjoint(t1::ThreadCache{T}) where {T} =
 		adjoint(cache(t1))
 
-	Base.ndims(::Type{ThreadCache{T}}) where {T<:AbstractArray} =
+	ndims(::Type{ThreadCache{T}}) where {T<:AbstractArray} =
 		ndims(T)
 	Base.Broadcast.broadcastable(tc::ThreadCache{<:AbstractArray}) =
 		cache(tc)
