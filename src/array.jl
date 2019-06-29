@@ -34,7 +34,6 @@ Returns an `array` and `index` where `arra[1:index-1]` holds all the values of `
 Like `separateperm` but accepts a preallocated index vector `ix`.
 """
 @export function separateperm!(f::Function, ix::AbstractVector{Int}, A::AbstractVector)
-	cur_id = 1
 	la = length(A)
 	@assert la <= length(ix) "Please supply an id vector that is of sufficient length (at least $la)."
 	true_id = 1

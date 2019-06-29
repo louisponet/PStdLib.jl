@@ -1,7 +1,7 @@
 name = "PStdLib"
 uuid = "81de72d6-94f4-11e9-3d35-4feaf5d5fb7f"
 authors = ["Louis Ponet <louisponet@gmail.com>"]
-repo = "https://github.com/louisponet/StdLib.jl.git"
+repo = "https://github.com/louisponet/PStdLib.jl.git"
 version = "0.0.0"
 
 [deps]
