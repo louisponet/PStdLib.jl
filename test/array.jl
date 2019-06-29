@@ -3,11 +3,15 @@ using PStdLib
 a = 1:100
 @test getfirst(x->x>50, a) == 51
 
-for i = 1:30
+for i = 1:10
 	a = rand(100)
 	b, id = separate(x -> x > 50, a)
 	@test all(map(x->x > 50, b[1:id-1]))
 	@test all(map(x->x <= 50, b[id:end]))
+	ids, id = separateperm(x -> x > 50, a)
+
+	@test all(map(x->x > 50, b[ids[1:id-1]]))
+	@test all(map(x->x <= 50, b[ids[id:end]]))
 end
 
 t = [1.0]

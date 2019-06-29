@@ -10,23 +10,31 @@ Like `filter()[1]`.
 end
 
 """
-	separate!(f::Function, A::AbstractVector, ix::AbstractVector{Int}=Vector{Int}(undef, length(A)))
+	separate!(f::Function, B::T, A::T) where T
 
-Like `separate` but in place, `ix` is a id buffer that will be used in `separateperm!`, of at least length of `A`. 
+Like `separate` but a vector `B` can be given in which the result will be stored.
 """
-@export function separate!(f::Function, A::AbstractVector, ix::AbstractVector{Int}=Vector{Int}(undef, length(A)))
-	ix, id = separateperm!(f, ix, A)
-	permute!(A, ix)
-	return A, id
+@export function separate!(f::Function, B::T, A::T) where T
+    nt, nf = 0, length(A)+1
+    @inbounds for a in A
+        if f(a)
+            B[nt+=1] = a
+        else
+            B[nf-=1] = a
+        end
+    end
+    fid = 1+nt
+    reverse!(@view B[fid:end])
+	return B, fid
 end
 
 """
 	separate(f::Function, A::AbstractVector{T})
 
-Returns an `array` and `index` where `arra[1:index-1]` holds all the values of `A` for which `f` returns `true`, and `array[index:end]` holds those for which `f` returns `false`.
+Returns an `array` and `index` where `array[1:index-1]` holds all the values of `A` for which `f` returns `true`, and `array[index:end]` holds those for which `f` returns `false`.
 """
 @export separate(f::Function, A::AbstractVector) =
-	separate!(f, deepcopy(A))
+	separate!(f, similar(A), A)
 
 """
 	separateperm!(f::Function, ix::AbstractVector{Int}, A::AbstractVector)
@@ -38,7 +46,7 @@ Like `separateperm` but accepts a preallocated index vector `ix`.
 	@assert la <= length(ix) "Please supply an id vector that is of sufficient length (at least $la)."
 	true_id = 1
 	false_id = 0
-	for (i, a) in enumerate(A)
+	@inbounds for (i, a) in enumerate(A)
 		if f(a)
 			ix[true_id] = i
 			true_id += 1
