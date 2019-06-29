@@ -32,12 +32,12 @@ env:
 
 ## uncomment the following lines to override the default test script
 #script:
-#  - julia -e 'Pkg.clone(pwd()); Pkg.build("DFControl"); Pkg.test("DFControl"; coverage=true)'
+#  - julia -e 'Pkg.clone(pwd()); Pkg.build("PStdLib"); Pkg.test("PStdLib"; coverage=true)'
 after_success:
   # push coverage results to Coveralls
-  - julia -e 'using DFControl; using Pkg; cd(dirname(dirname(pathof(DFControl)))); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  - julia -e 'using PStdLib; using Pkg; cd(dirname(dirname(pathof(PStdLib)))); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
   # push coverage results to Codecov
-  - julia -e 'using DFControl; using Pkg; cd(dirname(dirname(pathof(DFControl)))); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - julia -e 'using PStdLib; using Pkg; cd(dirname(dirname(pathof(PStdLib)))); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
 
   - julia -e 'Pkg.add("Documenter")'
-  - julia -e 'using DFControl; cd(dirname(dirname(pathof(DFControl)))); include(joinpath("docs", "make.jl"))'
+  - julia -e 'using PStdLib; cd(dirname(dirname(pathof(PStdLib)))); include(joinpath("docs", "make.jl"))'
