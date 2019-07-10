@@ -1,3 +1,9 @@
+@export norm2(a::AbstractArray) =
+	dot(a, a)
+
+Base.zeros(a::AbstractArray{T}) where T =
+	fill!(similar(a), zero(T))
+
 """
 Like `filter()[1]`.
 """
