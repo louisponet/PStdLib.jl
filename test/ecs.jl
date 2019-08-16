@@ -1,4 +1,3 @@
-using Revise
 using PStdLib: ECS
 using PStdLib: VectorTypes
 import PStdLib.ECS: Manager, ComponentData, Component, Entity, System, SystemData
@@ -53,13 +52,9 @@ es = Entity[]
 for i = 1:10
 	push!(es, Entity(m))
 end
-using BenchmarkTools
 m[Spatial, [es[2], es[3]]] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
-m[Speed, es[3]] = Speed(40.0)
 ECS.remove_entity!(m, es[2])
 ECS.valid_entities(m)
-m[es[2]]
-m[Speed]
 m[Spatial].data.data
 
 Entity(m)

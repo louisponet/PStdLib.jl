@@ -133,7 +133,7 @@ module VectorTypes
 			startid = A.start_ids[vid]
 			bvec    = A.data[vid]
 			if startid + length(bvec)>= A.start_ids[vid+1]
-				push!(bvec, A.data[vid+1])
+				append!(bvec, A.data[vid+1])
 				deleteat!(A.data, vid+1)
 				deleteat!(A.start_ids, vid+1)
 				break
@@ -192,7 +192,7 @@ module VectorTypes
 			return t_r
 		else
 			for (sid, vec) in zip(A.start_ids, A.data)
-				push!(t_r, collect(sid : (sid+length(vec)-1)))
+				append!(t_r, collect(sid : (sid+length(vec)-1)))
 			end
 			return t_r
 		end
