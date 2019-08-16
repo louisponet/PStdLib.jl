@@ -1,5 +1,7 @@
 using Test
 
+@time @testset "ecs" begin include("ecs.jl") end
+@time @testset "vectortypes"   begin include("vectortypes.jl") end
 @time @testset "math" begin include("math.jl") end
 @time @testset "Geometry" begin include("Geometry.jl") end
 @time @testset "string" begin include("string.jl") end
