@@ -14,6 +14,3 @@ res = @benchmark begin
 	p = pointer(t, 21)
 
 end samples = 100
-
-display(res)
-println()

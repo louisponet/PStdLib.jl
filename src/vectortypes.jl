@@ -11,156 +11,140 @@ module VectorTypes
 	"""
 	@export mutable struct GappedVector{T} <: AbstractVector{T}
 		data::Vector{Vector{T}}
-		start_ids::Vector{Int}
+		ranges::Vector{UnitRange{Int}}
 		function GappedVector{T}(vecs::Vector{Vector{T}}, start_ids::Vector{Int}) where T
 			totlen = 0
-			# if !in(1, start_ids)
-			# 	prepend!(start_ids, 1)
-			# end
 			# Check that no overlaps would happen
-			for (vec, sid) in zip(vecs, start_ids)
+			ranges = Vector{UnitRange{Int}}(undef, length(start_ids))
+			for (i, (vec, sid)) in enumerate(zip(vecs, start_ids))
 				if sid > totlen
 					totlen += sid + length(vec) - 1
 				else
 					error("start id $sid would result in overlapping vectors, this is not allowed")
 				end
+				ranges[i] = sid:sid+length(vec) - 1 	
 			end
-			return new{T}(vecs, start_ids)
+			return new{T}(vecs, ranges)
 		end
 	end
 
 
 	GappedVector{T}() where {T} = GappedVector{T}([T[]], Int[])
-	Base.isempty(A::GappedVector) = isempty(A.start_ids)
+	Base.isempty(A::GappedVector) = isempty(A.ranges)
 
 	Base.size(A::GappedVector)   = (length(A),)
-	Base.length(A::GappedVector) =  sum(length.(A.data))
 
-	Base.empty!(A::GappedVector{T}) where T = (A.start_ids = Int[1]; A.data = [T[]])
-	extent(A::GappedVector) = A.start_ids[end] + length(A.data[end]) - 1
-	# Base.push!(A::GappedVector{T}, x) where T = A[end+1] = convert(T, x)
+	function Base.length(A::GappedVector)
+		l = 0
+		for d in A.ranges
+			l += length(d)
+		end
+		return l
+	end
+
+	Base.empty!(A::GappedVector{T}) where T =
+		(A.ranges = UnitRange[]; A.data = [T[]])
+
+	extent(A::GappedVector) = last(A.ranges[end])
 
 	function Base.getindex(A::GappedVector, i::Int)
-		for (s_id, bvec) in zip(A.start_ids, A.data)
-			if s_id <= i < s_id + length(bvec)
-				return bvec[i - s_id + 1]
+		for (r, bvec) in zip(A.ranges, A.data)
+			if i ∈ r
+				return bvec[i - first(r) + 1]
 			end
 		end
 		error("Index $i is out of bounds.")
 	end
 
 	@export function overwrite!(A::GappedVector{T}, v::T, i::Int) where T
-		for (startid, bvec) in zip(A.start_ids, A.data)
-			endid   = startid + length(bvec)
-			if startid <= i < endid # overwrite
-				bvec[i - startid + 1] = v
+		for (r, bvec) in zip(A.ranges, A.data)
+			if i ∈ r
+				bvec[i - first(r) + 1] = v
 			end
 		end
 	end
+
+	increment_last(r::UnitRange) = first(r):last(r) + 1
+	decrement_last(r::UnitRange) = first(r):last(r) - 1
+	increment_first(r::UnitRange)= first(r)+1:last(r)
+	decrement_first(r::UnitRange)= first(r)-1:last(r)
+
+	function Base.push!(A::GappedVector{T}, v::T) where {T}
+		if isempty(A)
+			push!(A.data, [v])
+			push!(A.ranges, 1:1)
+		else
+			push!(A.data[end], v)
+			A.ranges[end] = increment_last(A.ranges[end])
+		end
+	end
+
+	data_vector_i(r, i) = i - first(r) + 1
 
 	function Base.setindex!(A::GappedVector{T}, v::T, i::Int) where T
-		conv_v = v
 
-		function add!()
-			push!(A.data, [conv_v])
-			push!(A.start_ids, i)
-		end
-
-		if isempty(A.start_ids)
-			push!(A.data[end], conv_v)
-			push!(A.start_ids, i)
-			return
-		end
-
-		if i == length(A) + 1
-			push!(A.data[end], conv_v)
+		if isempty(A.ranges) || i == last(A.ranges[end]) + 1
+			push!(A, v)
 		elseif i > extent(A) + 1
-			add!()
+			push!(A.data, [v])
+			push!(A.ranges, i:i)
 		else
-			handled = false
-			for iv = 1:length(A.start_ids)
-				startid = A.start_ids[iv]
+			rl = length(A.ranges)
+			for iv = 1:rl
+				r = A.ranges[iv]
 				bvec = A.data[iv]
-				endid   = startid + length(bvec)
-				if startid <= i < endid # overwrite
-					bvec[i - startid + 1] = conv_v
-					handled = true
-					break
-				elseif i == endid # grow right
-					push!(bvec, conv_v)
-					handled = true
-					break
-				elseif i == startid - 1 # grow lefti
-					insert!(bvec, 1, conv_v)
-					A.start_ids[iv] -= 1
-					handled = true
-					break
+				if i ∈ r # overwrite
+					bvec[data_vector_i(r, i)] = v
+					return v
+				elseif i == last(r) + 1 # grow right
+					push!(bvec, v)
+					if iv < rl && last(r) + 2 == first(A.ranges[iv+1])
+						append!(bvec, A.data[iv+1])
+						A.ranges[iv] = first(r):last(A.ranges[iv+1])
+						deleteat!(A.ranges, iv+1)
+						deleteat!(A.data, iv+1)
+					else
+						A.ranges[iv] = increment_last(r)
+					end
+					return v
+				elseif i == first(r) - 1 # grow lefti
+					insert!(bvec, 1, v)
+					A.ranges[iv] = decrement_first(r)
+					return v
+				elseif iv < rl && last(r) + 1 < i < first(A.ranges[iv+1]) - 1
+					insert!(A.data, iv+1, [v])
+					insert!(A.ranges, iv+1, i:i)
+					return v
 				end
 			end
-			if !handled
-				add!()
-			end
-			sort_start_ids!(A)
-			clean!(A)
-			return conv_v
 		end
 	end
+
 	Base.setindex!(g::GappedVector{T}, v, i::Int) where {T} =
 		Base.setindex!(g, convert(T, v), i)
 
-	function sort_start_ids!(A::GappedVector)
-		p = zeros(Int, length(A.start_ids))
-		sortperm!(p, A.start_ids)
-		A.data      .= A.data[p]
-		A.start_ids .= A.start_ids[p]
-	end
-
-	@export function clean!(A::GappedVector)
-		#TODO Performance: This should maybe be saved for a manual clean?
-		ids_to_remove = Int[]
-		for (i, bvec) in enumerate(A.data)
-			if isempty(bvec)
-				push!(ids_to_remove, i)
-			end
-		end
-		for i in reverse(sort(ids_to_remove))
-			deleteat!(A.data, i)
-			deleteat!(A.start_ids, i)
-		end
-
-		vid = 1
-		while vid < length(A.data)
-			startid = A.start_ids[vid]
-			bvec    = A.data[vid]
-			if startid + length(bvec)>= A.start_ids[vid+1]
-				append!(bvec, A.data[vid+1])
-				deleteat!(A.data, vid+1)
-				deleteat!(A.start_ids, vid+1)
-				break
-			else
-				vid += 1
-			end
-		end
-	end
+	overlap(r1::T, r2::T) where {T<:Union{AbstractVector{Int}, UnitRange}} =
+		r1[end] + 1 >= r2[1]
 
 	#does nothing when it doesn't have the index i
 	function Base.deleteat!(A::GappedVector, i::Int)
 		val = A[i]
-		for (vid, (startid, bvec)) in enumerate(zip(A.start_ids, A.data))
-			endid   = startid + length(bvec)
-			if startid < i < endid - 1 #insert new vector
-				push!(A.start_ids, i+1)
+		for (vid, (r, bvec)) in enumerate(zip(A.ranges, A.data))
+			startid = first(r)
+			endid   = last(r)
+			if startid < i < endid #insert new vector
+				push!(A.ranges, i+1:endid)
+				A.ranges[vid] = startid:i-1
 				push!(A.data, bvec[i - startid + 2:end]) 
 				A.data[vid] = bvec[1:i - startid]
-			elseif i == endid - 1 #remove last element
+			elseif i == endid #remove last element
 				pop!(bvec)
+				A.ranges[vid] = startid:endid - 1
 			elseif i == startid #reseat one element over
-				A.start_ids[vid] = startid + 1
-				A.data[vid]      = bvec[2:end]
+				A.ranges[vid] = startid+1:endid
+				A.data[vid]   = bvec[2:end]
 			end
 		end
-		sort_start_ids!(A)
-		clean!(A)
 		return val
 	end
 
@@ -177,8 +161,8 @@ module VectorTypes
 	end
 
 	@export function has_index(A::GappedVector, i)
-		for (sid, vec) in zip(A.start_ids, A.data)
-			if  sid <= i < sid + length(vec)
+		for r in A.ranges
+			if  i ∈ r
 				return true
 			end
 		end
@@ -188,29 +172,24 @@ module VectorTypes
 
 	function Base.eachindex(A::GappedVector)
 		t_r = Int[]
-		if isempty(A)
-			return t_r
-		else
-			for (sid, vec) in zip(A.start_ids, A.data)
-				append!(t_r, collect(sid : (sid+length(vec)-1)))
-			end
-			return t_r
+		for r in A.ranges
+			append!(t_r, collect(r))
 		end
+		return t_r
 	end
 
-	function Base.pointer(A::GappedVector, start_id::Int)
-		i = 0
-		for (sid, vec) in zip(A.start_ids, A.data)
-			if sid <= start_id <= sid + length(vec) - 1
-				return pointer(vec, start_id - sid + 1)
+	function Base.pointer(A::GappedVector, i::Int)
+		for (r, vec) in zip(A.ranges, A.data)
+			if i ∈ r
+				return pointer(vec, i - first(r) + 1)
 			end
 		end
 		# This should never happen
-		return pointer(A.data[end], start_id - A.start_ids[end] + 1)
+		return pointer(A.data[end], i - first(A.ranges[end]) + 1)
 	end
 
 	#TODO Performance: this can be optimized quite a bit
-	@export ranges(A::GappedVector) = [sid:sid + length(vec) - 1  for (sid, vec) in zip(A.start_ids, A.data)]
+	@export ranges(A::GappedVector) = A.ranges
 	@export ranges(As::GappedVector...) = find_overlaps(ranges.(As))
 
 	@export function find_overlaps(ranges)
@@ -235,18 +214,18 @@ module VectorTypes
 	function Base.show(io::IO, g::GappedVector{T}) where T
 		println(io, "GappedVector{$T}")
 		println(io, "\tlength: $(length(g))")
-		println(io, "\tstartids: $(g.start_ids)")
+		println(io, "\tranges: $(g.ranges)")
 	end
 
 	function Base.Multimedia.display(io::IO, g::GappedVector{T}) where T
 		println(io, "GappedVector{$T}")
 		println(io, "\tlength: $(length(g))")
-		println(io, "\tstartids: $(g.start_ids)")
+		println(io, "\tranges: $(g.ranges)")
 	end
 	function Base.Multimedia.display(g::GappedVector{T}) where T
 		println("GappedVector{$T}")
 		println("\tlength: $(length(g))")
-		println("\tstartids: $(g.start_ids)")
+		println("\tranges: $(g.ranges)")
 	end
 
 end
