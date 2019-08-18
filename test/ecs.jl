@@ -1,15 +1,10 @@
+#%%
 using PStdLib: ECS
 using PStdLib: VectorTypes
 import PStdLib.ECS: Manager, ComponentData, Component, Entity, System, SystemData
-import PStdLib.VectorTypes: GappedVector
+using PStdLib.VectorTypes
 using PStdLib.Geometry
 using PStdLib
-
-mutable struct TimingData <: ComponentData
-	time     ::Float64
-	dtime    ::Float64
-	reversed ::Bool
-end
 
 @with_kw struct Spring <: ComponentData
 	center::Point3{Float64} = zero(Point3{Float64})
@@ -26,35 +21,47 @@ struct Oscillator <: System
 	data ::SystemData
 end
 
-Oscillator(m::Manager) = Oscillator(SystemData(m, (Spatial, Spring), (TimingData)))
+function Oscillator(m::Manager)
+	O = Oscillator(SystemData((Spatial, Spring), m))
+	push!(m.systems, O)
+	return O
+end
 
 function update(sys::Oscillator)
 	spat   = sys[Spatial]
 	spring = sys[Spring]
-	td     = sys[TimingData]
-	dt     = td.dtime
-	sorted_comps = sort([spat, spring], by=length)
-	test_es = eachindex(sorted_comps[1])
-	for e in test_es
-		if has(sorted_comps[2], e)
-			e_spat   = spat[e]
-			v_prev   = e_spat.velocity
-			new_v    = v_prev - (e_spat.position - spr.center) * spr.k - v_prev * spr.damping
-			new_p    = e_spat.position + v_prev * dt
-			ECS.overwrite!(spat, Spatial(new_p, new_v), e)
-		end
+	dt     = 1.0
+	for (it, (e_spat, spr)) in enumerate(zip(spat, spring))
+		v_prev   = e_spat.v
+		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+		new_p    = e_spat.p + v_prev * dt
+		spat[it] = Spatial(new_p, new_v)
 	end
 end
 
-m = Manager(Spatial, Spring, TimingData)
 
-es = Entity[]
-for i = 1:10
-	push!(es, Entity(m))
+m = Manager(Spatial, Spring, init_size=1000000)
+
+function create_fill(m)
+	spat   = m[Spatial]
+	spring = m[Spring]
+	for i = 1:1000000
+		e = Entity(m)
+		spat[e.id] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
+		if i%2 == 0
+			spring[e.id] = Spring()
+		end
+	end
+	# empty!(m)
 end
-m[Spatial, [es[2], es[3]]] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
-ECS.remove_entity!(m, es[2])
-ECS.valid_entities(m)
-m[Spatial].data.data
+create_fill(m)
+#%%
 
-Entity(m)
+O = Oscillator(m)
+for i = 1:5
+	update(O)
+end
+
+@test m[Spatial, Entity(230)].p[2] == 5.8006
+
+#%%
