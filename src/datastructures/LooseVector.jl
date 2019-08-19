@@ -1,16 +1,17 @@
-const DEFAULT_NMAX = 1000
-mutable struct LooseVector{T} <: AbstractVector{T}
-	n     ::UInt
-	nmax  ::UInt
-	packed::Vector{UInt}
-	loose ::Vector{UInt}
-	data  ::Vector{T}
-	function LooseVector{T}(nmax=DEFAULT_NMAX) where {T}
-		return new{T}(1, nmax, Vector{UInt}(undef, nmax), Vector{UInt}(undef, nmax), Vector{T}(undef, nmax))
+mutable struct LooseVector{T,PS<:PackedIntSet{Int}} <: AbstractVector{T}
+	indices::PS
+	data   ::Vector{T}
+	function LooseVector{T}(values::AbstractVector{T}) where {T}
+		set = PackedIntSet{Int}(1:length(values))
+		return new{T, typeof(set)}(set, values)
 	end
 end
 
-@inline Base.length(s::LooseVector) = s.n - 1
+LooseVector{T}() where {T} = LooseVector{T}(T[])
+
+@inline packed_id(s::LooseVector, i) = packed_id(s.indices, i)
+
+@inline Base.length(s::LooseVector) = length(s.data)
 @inline Base.size(s::LooseVector) = (length(s),)
 
 Base.IndexStyle(::Type{<:LooseVector}) = IndexLinear()
@@ -23,27 +24,16 @@ function Base.iterate(s::LooseVector, state=1)
 	end
 end
 
-@inline extent(s::LooseVector) = s.nmax
-
-@inline packed_id(s::LooseVector, i) =
-	unsafe_load(pointer(s.loose, i))
-
-@inline loose_id(s::LooseVector, i) =
-	unsafe_load(pointer(s.packed, i))
-
-@inline Base.in(i, s::LooseVector) =
-	packed_id(s, i) < s.n && loose_id(s, packed_id(s,i)) == i
+@inline Base.in(i, s::LooseVector) = in(i, s.indices)
 
 @inline function Base.setindex!(s::LooseVector, v, i)
-	@boundscheck if i > s.nmax
-		throw(BoundsError(s, i))
-	end
 	if !in(i, s)
-		@inbounds s.loose[i] = s.n
-		@inbounds s.packed[s.n] = i
-		s.n += 1
+		push!(s.indices, i)
+		push!(s.data, v)
+	else
+		@inbounds s.data[packed_id(s, i)] = v
 	end
-	@inbounds s.data[packed_id(s, i)] = v
+	return v
 end
 
 @inline function Base.getindex(s::LooseVector, i)
@@ -53,34 +43,39 @@ end
 	return s.data[packed_id(s, i)]
 end
 
-function Base.deleteat!(s::LooseVector, i)
+@inline function Base.pop!(s::LooseVector, i)
 	@boundscheck if !in(i, s)
 		throw(BoundsError(s, i))
 	end
 	n = length(s)
 	@inbounds begin
 		id = packed_id(s, i)
-		sid = s.packed[n]
-		s.packed[n], s.packed[id] = s.packed[id], s.packed[n]
-		s.data[n],  s.data[id]  = s.data[id],  s.data[n]
-		s.loose[sid] = id
+		v = s.data[id]
+		s.data[id] = s.data[end]
+		pop!(s.data)
+		pop!(s.indices, i)
 	end
-	s.n -= 1
+	return v
 end
 
-@inline Base.empty!(s::LooseVector) = s.n = 1
+@inline function Base.empty!(s::LooseVector)
+	empty!(s.data)
+	empty!(s.indices)
+end
 
 @inline Base.eltype(s::LooseVector{T}) where T = T
+
+@inline Base.isempty(s::LooseVector) = isempty(s.data)
 
 Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 	mapreduce(f, op, view(A.data, 1:length(A)); kwargs...) 
 
 struct LooseIterator{T}
 	vecs::T
-	shortest_vec_length::UInt
+	shortest_vec_length::Int
 	shortest_vec_id::Int
 	function LooseIterator(vecs::LooseVector...)
-		minl  = typemax(UInt)
+		minl  = typemax(Int)
 		minid = 0
 		for (i, s) in enumerate(vecs) 
 			if length(s) < minl
@@ -111,7 +106,8 @@ function Base.iterate(it::LooseIterator, state=0)
 	if state > length(it)
 		return nothing
 	end
-	id = loose_id(it.vecs[it.shortest_vec_id], state)
+
+	id = it.vecs[it.shortest_vec_id].indices.packed[state]
 	if !all_have_index(id, it.vecs)
 		return iterate(it, state)
 	end
@@ -124,7 +120,7 @@ function Base.iterate(e::Base.Enumerate{<:LooseIterator}, state=0)
 	if state > length(it)
 		return nothing
 	end
-	id = loose_id(it.vecs[it.shortest_vec_id], state)
+	id = it.vecs[it.shortest_vec_id].indices.packed[state]
 	if !all_have_index(id, it.vecs)
 		return iterate(e, state)
 	end

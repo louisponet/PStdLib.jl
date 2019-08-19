@@ -1,4 +1,4 @@
-using PStdLib.VectorTypes
+using PStdLib.DataStructures
 using PStdLib
 t = GappedVector{Int}([[1, 3, 4], [5, 6, 7]], [1, 20])
 @test t[1] == 1
@@ -32,7 +32,7 @@ end
 @test vt == 1:6
 
 
-const set1 = LooseVector{Int}(1000)
+const set1 = LooseVector{Int}()
 tids1 = unique(rand(1:900, 300))
 for i in tids1
 	set1[i] = 23
@@ -42,7 +42,7 @@ end
 
 @test sum(set1) == 23*length(tids1)
 
-const set2 = LooseVector{Int}(1000)
+const set2 = LooseVector{Int}()
 tids2 = rand(1:900, 300)
 for i in tids2
 	set2[i] = 55

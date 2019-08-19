@@ -1,5 +1,5 @@
 module ECS
-	using ..VectorTypes
+	using ..DataStructures
 	import ..getfirst
 
 	const VECTORTYPE = LooseVector
@@ -9,7 +9,7 @@ module ECS
 		id::Int
 	end
 
-	id(e::Entity) = e.id
+	@inline id(e::Entity) = e.id
 
 	function Entity(m::AbstractManager)
 		if !isempty(free_entities(m))
@@ -23,7 +23,7 @@ module ECS
 		return e
 	end
 
-	Base.getindex(v::AbstractVector, e::Entity) = v[id(e)]
+	@inline Base.@propagate_inbounds Base.getindex(v::AbstractVector, e::Entity) = v[id(e)]
 	# Base.setindex!(vec::AbstractVector, v, e::Entity) = setindex!(vec, v, id(e))
 	# Base.deleteat!(vec::AbstractVector, e::Entity) = deleteat!(vec, id(e))
 
@@ -33,17 +33,17 @@ module ECS
 
 	Base.eltype(::AbstractComponent{T}) where T = T
 
-	data(c::AbstractComponent) = c.data
-	has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
-	Base.getindex(c::AbstractComponent, e::Entity) =data(c)[e]
+	@inline data(c::AbstractComponent) = c.data
+	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
+	@inline Base.getindex(c::AbstractComponent, e::Entity) = c.data[e.id]
 
-	struct Component{T} <: AbstractComponent{T}
+	struct Component{T, VT<:AbstractVector{T}} <: AbstractComponent{T}
 		id  ::Int
-		data::VECTORTYPE{T}
-		function Component{T}(m::AbstractManager, init_size) where {T<:ComponentData}
+		data::VT
+		function Component{T}(m::AbstractManager) where {T<:ComponentData}
 			n = length(components(m)) + 1
-			v = VECTORTYPE{T}(init_size)
-			c = new{T}(n, v)
+			v = VECTORTYPE{T}()
+			c = new{T,typeof(v)}(n, v)
 			m.components[T] = c
 			return c
 		end
@@ -55,19 +55,19 @@ module ECS
 
 	ComponentDict() = ComponentDict(Dict{DataType, Component}())
 
-	Base.getindex(c::ComponentDict, ::Type{T}) where {T<:ComponentData} =
+	@inline Base.getindex(c::ComponentDict, ::Type{T}) where {T<:ComponentData} =
 		c.dict[T]::Component{T}
 
-	Base.setindex!(c::ComponentDict, v, ::Type{T}) where {T<:ComponentData} =
+	@inline Base.setindex!(c::ComponentDict, v, ::Type{T}) where {T<:ComponentData} =
 		c.dict[T] = v
 
-	Base.length(c::ComponentDict) = length(c.dict)
+	@inline Base.length(c::ComponentDict) = length(c.dict)
 
-	Base.iterate(c::ComponentDict, args...) = iterate(c.dict, args...)
+	@inline Base.iterate(c::ComponentDict, args...) = iterate(c.dict, args...)
 
 	#maybe this shouldn't be called remove_entity!
 	remove_entity!(c::AbstractComponent, e::Entity) =
-		deleteat!(c.data, id(e))
+		pop!(c.data, id(e))
 
 	struct SharedComponent{T<:ComponentData} <: AbstractComponent{T}
 		id    ::Int
@@ -84,10 +84,11 @@ module ECS
 		systems      ::Vector{System}
 	end
 
-	Base.getindex(c::Component, i)       = getindex(data(c), i)
-	Base.getindex(c::SharedComponent, i) = getindex(c.shared[data(c)[i]])
+	@inline Base.getindex(c::Component, i) = getindex(c.data, i)
+	Base.getindex(c::SharedComponent, i) = getindex(c.shared[c.data[i]])
 
-	Base.setindex!(c::Component, v, i)   = setindex!(c.data, v, i)
+	@inline Base.setindex!(c::Component, v, i)   = setindex!(c.data, v, i)
+	@inline Base.setindex!(c::Component, v, i::Entity)   = setindex!(c, v, i.id)
 	Base.zip(cs::Component...) = zip(data.(cs)...)
 
 
@@ -130,11 +131,11 @@ module ECS
 
 	Manager() = Manager(Entity[], Entity[], ComponentDict(), System[])
 
-	function Manager(components...; init_size=1000)
+	function Manager(components...)
 		m = Manager()
 		comps = ComponentDict()
 		for c in components
-			comps[c] = Component{c}(m, init_size)
+			comps[c] = Component{c}(m)
 		end
 		return m
 	end
@@ -195,6 +196,7 @@ module ECS
 		return v
 	end
 
+	Entity(m::Manager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
 
 	function remove_entity!(m::Manager, e::Entity)
 		entity_assert(m, e)

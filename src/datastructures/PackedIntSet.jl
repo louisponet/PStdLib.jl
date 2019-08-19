@@ -1,3 +1,5 @@
+
+#TODO: Batch creation and allocation
 struct PackedIntSet{T<:Integer,P<:TypedPage{T}}
 	packed ::Vector{T}
 	reverse::Vector{P}
@@ -23,6 +25,11 @@ function PackedIntSet{T}(indices) where {T}
 	return set
 end
 PackedIntSet(indices::AbstractVector{T}) where {T} = PackedIntSet{T}(indices)
+
+@inline Base.@propagate_inbounds function packed_id(s::PackedIntSet{T}, i) where {T}
+	page, offset = page_offset(s, i)
+	return s.reverse[page][offset]::T
+end
 
 @inline Base.length(s::PackedIntSet) = length(s.packed)
 
@@ -68,7 +75,7 @@ end
 
 @inline function Base.in(i, s::PackedIntSet)
 	page, offset = page_offset(s, i)
-	isassigned(s.reverse, page) &&  s.reverse[page][offset] != 0
+	isassigned(s.reverse, page) && s.reverse[page][offset] != 0
 end
 
 @inline function Base.pop!(s::PackedIntSet)
@@ -82,15 +89,17 @@ end
 	@boundscheck if !in(id, s)
 		throw(BoundsError(s, id))
 	end
-	packed_endid           = s.packed[end] 
-	from_page, from_offset = page_offset(s, id)
-	to_page, to_offset     = page_offset(s, packed_endid)
+	@inbounds begin
+		packed_endid           = s.packed[end] 
+		from_page, from_offset = page_offset(s, id)
+		to_page, to_offset     = page_offset(s, packed_endid)
 
-	packed_id                         = s.reverse[from_page][from_offset]
-	s.packed[packed_id]               = packed_endid
-	s.reverse[to_page][to_offset]     = s.reverse[from_page][from_offset]
-	s.reverse[from_page][from_offset] = 0
-	pop!(s.packed)
+		packed_id                         = s.reverse[from_page][from_offset]
+		s.packed[packed_id]               = packed_endid
+		s.reverse[to_page][to_offset]     = s.reverse[from_page][from_offset]
+		s.reverse[from_page][from_offset] = 0
+		pop!(s.packed)
+	end
     return id
 end
 
