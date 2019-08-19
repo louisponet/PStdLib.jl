@@ -31,14 +31,14 @@ end
 @inline loose_id(s::LooseVector, i) =
 	unsafe_load(pointer(s.packed, i))
 
-@inline hasindex(s::LooseVector, i, packedid = packed_id(s,i)) =
-	packedid < s.n && loose_id(s, packedid) == i
+@inline Base.in(i, s::LooseVector) =
+	packed_id(s, i) < s.n && loose_id(s, packed_id(s,i)) == i
 
 @inline function Base.setindex!(s::LooseVector, v, i)
 	@boundscheck if i > s.nmax
 		throw(BoundsError(s, i))
 	end
-	if !hasindex(s, i)
+	if !in(i, s)
 		@inbounds s.loose[i] = s.n
 		@inbounds s.packed[s.n] = i
 		s.n += 1
@@ -47,14 +47,14 @@ end
 end
 
 @inline function Base.getindex(s::LooseVector, i)
-	@boundscheck if !hasindex(s, i)
+	@boundscheck if !in(i, s)
 		throw(BoundsError(s, i))
 	end
 	return s.data[packed_id(s, i)]
 end
 
 function Base.deleteat!(s::LooseVector, i)
-	@boundscheck if !hasindex(s, i)
+	@boundscheck if !in(i, s)
 		throw(BoundsError(s, i))
 	end
 	n = length(s)
@@ -99,7 +99,7 @@ Base.length(it::LooseIterator) = it.shortest_vec_length
 
 function all_have_index(id, vecs)
 	for s in vecs
-		if !hasindex(s, id)
+		if !in(id, s)
 			return false
 		end
 	end

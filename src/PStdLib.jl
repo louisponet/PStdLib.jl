@@ -10,7 +10,7 @@ module PStdLib
 	include("math.jl")
 	include("ThreadCaches.jl")
 	include("BLASCaches.jl")
-	include("vectortypes.jl")
+	include("datastructures.jl")
 	include("ECS/ECS.jl")
 	#general Utility functions
 	"Like `joinpath(homedir(), args...)`"

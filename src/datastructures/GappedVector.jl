@@ -169,7 +169,7 @@ function Base.iterate(A::GappedVector, state=(1,1))
 	end
 end
 
-function hasindex(A::GappedVector, i)
+function Base.in(i, A::GappedVector)
 	for r in A.ranges
 		if  i ∈ r
 			return true

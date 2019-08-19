@@ -1,4 +1,6 @@
 #%%
+using Revise
+using BenchmarkTools
 using PStdLib: ECS
 using PStdLib: VectorTypes
 import PStdLib.ECS: Manager, ComponentData, Component, Entity, System, SystemData
@@ -52,9 +54,13 @@ function create_fill(m)
 			spring[e.id] = Spring()
 		end
 	end
-	# empty!(m)
+	empty!(m)
 end
-create_fill(m)
+
+
+
+
+@btime create_fill(m)
 #%%
 
 O = Oscillator(m)
@@ -63,5 +69,3 @@ for i = 1:5
 end
 
 @test m[Spatial, Entity(230)].p[2] == 5.8006
-
-#%%

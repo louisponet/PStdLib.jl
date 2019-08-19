@@ -34,7 +34,7 @@ module ECS
 	Base.eltype(::AbstractComponent{T}) where T = T
 
 	data(c::AbstractComponent) = c.data
-	has(c::AbstractComponent, e::Entity) = hasindex(data(c), id(e))
+	has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
 	Base.getindex(c::AbstractComponent, e::Entity) =data(c)[e]
 
 	struct Component{T} <: AbstractComponent{T}
@@ -210,10 +210,14 @@ module ECS
 	function Base.empty!(m::Manager)
 		empty!(m.entities)
 
-		for c in components(m)
+		for c in values(components(m))
 			empty!(c)
 		end
 	end
 
 	Base.empty!(c::Component) = empty!(c.data)
+
+	Base.getindex(d::Dict, e::Entity) = d[id(e)]
+	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
+
 end
