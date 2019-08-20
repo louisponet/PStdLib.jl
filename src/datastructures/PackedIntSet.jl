@@ -1,19 +1,11 @@
 
 #TODO: Batch creation and allocation
-struct PackedIntSet{T<:Integer,P<:TypedPage{T}}
+struct PackedIntSet{T<:Integer}
 	packed ::Vector{T}
-	reverse::Vector{P}
-	function PackedIntSet{T,P}() where {T,P}
-		out = new{T,P}(T[], P[])
+	reverse::Vector{TypedPage{T}}
+	function PackedIntSet{T}() where {T}
+		out = new{T}(T[], TypedPage{T}[])
 		return out
-	end
-end
-
-@generated function PackedIntSet{T}() where {T}
-	pagesize = ccall(:jl_getpagesize, Clong, ())
-	quote
-		nmax = div($pagesize, sizeof(T))
-		return PackedIntSet{T, TypedPage{T, nmax}}()
 	end
 end
 
@@ -33,20 +25,20 @@ end
 
 @inline Base.length(s::PackedIntSet) = length(s.packed)
 
-@inline function page_offset(s::PackedIntSet{T,P}, i) where {T,P}
-	page = div(i - 1, length(P)) + 1
-	return page, mod1(i, length(P))
+@inline function page_offset(s::PackedIntSet, i)
+	page = div(i - 1, length(eltype(s.reverse))) + 1
+	return page, mod1(i, length(eltype(s.reverse)))
 end
 
-@inline function assure!(s::PackedIntSet{T, P}, page) where {T,P}
+@inline function assure!(s::PackedIntSet{T}, page) where {T}
 	if page > length(s.reverse)
 		resize!(s.reverse, page - 1)
-		p = P()
+		p = TypedPage{T}()
 		fill!(p, zero(T))
 		push!(s.reverse, p)
 		return p, true
 	elseif !isassigned(s.reverse, page)
-		p = P()
+		p = TypedPage{T}()
 		fill!(p, zero(T))
 		s.reverse[page] = p 
 		return p, true
@@ -54,7 +46,7 @@ end
 	return s.reverse[page], false
 end
 
-@inline function Base.push!(s::PackedIntSet{T, P}, i) where {T,P}
+@inline function Base.push!(s::PackedIntSet, i)
 	page, offset = page_offset(s, i)
 	typed_page, newly_created = assure!(s, page)
 	if newly_created || typed_page[offset] == 0
@@ -65,10 +57,10 @@ end
 	return s
 end
 
-@inline function Base.empty!(s::PackedIntSet{T}) where {T}
+@inline function Base.empty!(s::PackedIntSet)
 	empty!(s.packed)
 	for p in s.reverse
-		fill!(p, zero(T))
+		fill!(p, 0)
 	end
 	return s
 end

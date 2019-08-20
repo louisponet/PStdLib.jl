@@ -37,13 +37,13 @@ module ECS
 	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
 	@inline Base.getindex(c::AbstractComponent, e::Entity) = c.data[e.id]
 
-	struct Component{T, VT<:AbstractVector{T}} <: AbstractComponent{T}
+	struct Component{T} <: AbstractComponent{T}
 		id  ::Int
-		data::VT
+		data::VECTORTYPE{T}
 		function Component{T}(m::AbstractManager) where {T<:ComponentData}
 			n = length(components(m)) + 1
 			v = VECTORTYPE{T}()
-			c = new{T,typeof(v)}(n, v)
+			c = new{T}(n, v)
 			m.components[T] = c
 			return c
 		end
@@ -84,7 +84,7 @@ module ECS
 		systems      ::Vector{System}
 	end
 
-	@inline Base.getindex(c::Component, i) = getindex(c.data, i)
+	@inline Base.getindex(c::Component, i::Int) = getindex(c.data, i)
 	Base.getindex(c::SharedComponent, i) = getindex(c.shared[c.data[i]])
 
 	@inline Base.setindex!(c::Component, v, i)   = setindex!(c.data, v, i)

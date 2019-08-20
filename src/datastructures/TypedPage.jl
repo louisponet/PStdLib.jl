@@ -1,22 +1,15 @@
-struct TypedPage{T, S}
+elements_per_page(::Type{T}) where {T} = div(PAGESIZE, sizeof(T))
+struct TypedPage{T}
 	data::Vector{T}
-	function TypedPage{T, S}() where {T, S}
-		new{T, S}(Vector{T}(undef, S))
-	end
-end
-
-@generated function TypedPage{T}() where {T}
-	pagesize = ccall(:jl_getpagesize, Clong, ())
-	quote
-		nmax = div($pagesize, sizeof(T))
-		return TypedPage{T, nmax}()
+	function TypedPage{T}() where {T}
+		new{T}(Vector{T}(undef, elements_per_page(T)))
 	end
 end
 
 Base.fill!(p::TypedPage, v) = (fill!(p.data, v); p)
 
-Base.length(::TypedPage{T, S}) where {T,S} = S
-Base.length(::Type{TypedPage{T, S}}) where {T,S} = S
+Base.length(::TypedPage{T}) where {T} = elements_per_page(T)
+Base.length(::Type{TypedPage{T}}) where {T} = elements_per_page(T)
 
 @inline Base.@propagate_inbounds function Base.getindex(p::TypedPage, i)
 	@boundscheck if i > length(p)

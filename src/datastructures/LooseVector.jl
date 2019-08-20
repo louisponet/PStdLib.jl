@@ -1,9 +1,9 @@
-mutable struct LooseVector{T,PS<:PackedIntSet{Int}} <: AbstractVector{T}
-	indices::PS
+mutable struct LooseVector{T} <: AbstractVector{T}
+	indices::PackedIntSet{Int}
 	data   ::Vector{T}
 	function LooseVector{T}(values::AbstractVector{T}) where {T}
 		set = PackedIntSet{Int}(1:length(values))
-		return new{T, typeof(set)}(set, values)
+		return new{T}(set, values)
 	end
 end
 
@@ -88,7 +88,7 @@ struct LooseIterator{T}
 	end
 end
 
-Base.zip(s::LooseVector...) = LooseIterator(s...)
+Base.zip(s::LooseVector...) = LooseIterator(s...)::LooseIterator{typeof(s)}
 
 Base.length(it::LooseIterator) = it.shortest_vec_length
 
