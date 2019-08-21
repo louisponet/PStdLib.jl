@@ -1,6 +1,14 @@
 module ECS
 	using ..DataStructures
 	import ..getfirst
+	export System
+	export SystemData
+	export ComponentData
+	export Component
+	export Entity
+	export Manager
+
+	export update
 
 	const VECTORTYPE = LooseVector
 	abstract type AbstractManager end
@@ -35,8 +43,9 @@ module ECS
 
 	@inline data(c::AbstractComponent) = c.data
 	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
-	@inline Base.getindex(c::AbstractComponent, e::Entity) = c.data[e.id]
 
+	@inline Base.getindex(c::AbstractComponent, e::Entity) = c.data[e.id]
+	@inline Base.getindex(c::AbstractComponent, e::Int)    = c.data[e.id]
 	struct Component{T} <: AbstractComponent{T}
 		id  ::Int
 		data::VECTORTYPE{T}
@@ -48,6 +57,9 @@ module ECS
 			return c
 		end
 	end
+
+
+
 
 	struct ComponentDict <: AbstractDict{DataType, Component}
 		dict::Dict{DataType, Component}

@@ -41,18 +41,20 @@ m = Manager(Spatial, Spring)
 function create_fill(m)
 	spat   = m[Spatial]
 	spring = m[Spring]
-	t = (sp, spr) -> begin
-		for i = 1:1000
-			e = Entity(m)
-			sp[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
-			if i%2 == 0
-				spr[e] = Spring()
-			end
+	for i = 1:1000000
+		e = Entity(m, i)
+		spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
+		if i%2 == 0
+			spring[e] = Spring()
 		end
 	end
-	t(spat, spring)
+	# t = (sp, spr) -> begin
+	# end
+	# t(spat, spring)
+	empty!(m)
 end
-create_fill(m)
+using BenchmarkTools
+@btime create_fill(m) setup=(m=Manager(Spatial, Spring)) evals=1 samples=1000
 #%%
 O = Oscillator(m)
 
