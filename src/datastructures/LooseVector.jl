@@ -40,7 +40,7 @@ end
 	@boundscheck if !in(i, s)
 		throw(BoundsError(s, i))
 	end
-	return s.data[packed_id(s, i)]
+	return @inbounds s.data[packed_id(s, i)]
 end
 
 @inline function Base.pop!(s::LooseVector, i)
@@ -107,7 +107,7 @@ function Base.iterate(it::LooseIterator, state=0)
 		return nothing
 	end
 
-	id = it.vecs[it.shortest_vec_id].indices.packed[state]
+	@inbounds id = it.vecs[it.shortest_vec_id].indices.packed[state]
 	if !all_have_index(id, it.vecs)
 		return iterate(it, state)
 	end
@@ -120,7 +120,7 @@ function Base.iterate(e::Base.Enumerate{<:LooseIterator}, state=0)
 	if state > length(it)
 		return nothing
 	end
-	id = it.vecs[it.shortest_vec_id].indices.packed[state]
+	@inbounds id = it.vecs[it.shortest_vec_id].indices.packed[state]
 	if !all_have_index(id, it.vecs)
 		return iterate(e, state)
 	end

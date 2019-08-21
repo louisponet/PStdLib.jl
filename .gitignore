@@ -1,2 +1,5 @@
-
-Manifest\.toml
+*.jl.*.cov
+*.jl.*mem
+*.jl.cov
+.DS_StoreManifest\.toml
+/benchmark/*.json

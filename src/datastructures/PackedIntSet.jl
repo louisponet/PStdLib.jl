@@ -17,6 +17,7 @@ function PackedIntSet{T}(indices) where {T}
 	return set
 end
 PackedIntSet(indices::AbstractVector{T}) where {T} = PackedIntSet{T}(indices)
+PackedIntSet() = PackedIntSet{Int}()
 
 @inline Base.@propagate_inbounds function packed_id(s::PackedIntSet{T}, i) where {T}
 	page, offset = page_offset(s, i)
