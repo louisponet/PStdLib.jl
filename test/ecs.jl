@@ -48,14 +48,8 @@ function create_fill(m)
 			spring[e] = Spring()
 		end
 	end
-	# t = (sp, spr) -> begin
-	# end
-	# t(spat, spring)
-	empty!(m)
 end
-using BenchmarkTools
-@btime create_fill(m) setup=(m=Manager(Spatial, Spring)) evals=1 samples=1000
-#%%
+create_fill(m)
 O = Oscillator(m)
 
 for i = 1:5
