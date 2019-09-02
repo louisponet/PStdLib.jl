@@ -71,6 +71,15 @@ end
 	isassigned(s.reverse, page) && s.reverse[page][offset] != 0
 end
 
+@inline function Base.findfirst(i, s::PackedIntSet)
+	page, offset = page_offset(s, i)
+	if isassigned(s.reverse, page)
+		id = s.reverse[page][offset]
+		return id
+	end
+	return 0
+end
+
 @inline function Base.pop!(s::PackedIntSet)
 	id = pop!(s.packed)
 	page, offset = page_offset(s, id)
@@ -94,5 +103,31 @@ end
 		pop!(s.packed)
 	end
     return id
+end
+
+struct ZippedPackedIntSetIterator{T}
+	sets::T
+	shortest_set::PackedIntSet{Int}
+	ZippedPackedIntSetIterator(sets::PackedIntSet...) =
+		new{typeof(sets)}(sets, sets[findmin(map(x->length(x), sets))[2]])
+end
+
+Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)::ZippedPackedIntSetIterator{typeof(s)}
+
+Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
+
+
+Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=1)
+	state += 1
+	if state > length(it)
+		return nothing
+	end
+
+	id = it.shortest_set.packed[state]
+	tids = map(x -> findfirst(id, x), it.sets)
+	if !all(x -> x!=0, tids)
+		return iterate(it, state)
+	end
+	return tids, state
 end
 

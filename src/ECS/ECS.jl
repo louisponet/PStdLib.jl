@@ -44,8 +44,7 @@ module ECS
 	@inline data(c::AbstractComponent) = c.data
 	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
 
-	@inline Base.getindex(c::AbstractComponent, e::Entity) = c.data[e.id]
-	@inline Base.getindex(c::AbstractComponent, e::Int)    = c.data[e.id]
+
 	struct Component{T} <: AbstractComponent{T}
 		id  ::Int
 		data::VECTORTYPE{T}
@@ -58,8 +57,14 @@ module ECS
 		end
 	end
 
+	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Entity) = c.data[id(e)]
+	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = c.data.data[e]
 
+	@inline Base.@propagate_inbounds Base.pointer(c::Component, e::Entity) = pointer(c.data, id(e))
+	@inline Base.pointer(c::Component, e::Int)    = packed_pointer(c.data, i)
 
+	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Entity) = c.data[id(e)] = v
+	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Int)    = c.data.data[e] = v
 
 	struct ComponentDict <: AbstractDict{DataType, Component}
 		dict::Dict{DataType, Component}
@@ -96,13 +101,7 @@ module ECS
 		systems      ::Vector{System}
 	end
 
-	@inline Base.getindex(c::Component, i::Int) = getindex(c.data, i)
-	Base.getindex(c::SharedComponent, i) = getindex(c.shared[c.data[i]])
-
-	@inline Base.setindex!(c::Component, v, i)   = setindex!(c.data, v, i)
-	@inline Base.setindex!(c::Component, v, i::Entity)   = setindex!(c, v, i.id)
 	Base.zip(cs::Component...) = zip(data.(cs)...)
-
 
 	function Base.setindex!(c::SharedComponent,v, i)
 		id = findfirst(isequal(v), c.shared)
@@ -152,11 +151,11 @@ module ECS
 		return m
 	end
 
-	components(m::Manager) = m.components
-	entities(m::Manager)   = m.entities
-	free_entities(m::Manager) = m.free_entities
+	components(m::Manager)     = m.components
+	entities(m::Manager)       = m.entities
+	free_entities(m::Manager)  = m.free_entities
 	valid_entities(m::Manager) = filter(x -> x.id != 0, m.entities)
-	systems(m::Manager)    = m.systems
+	systems(m::Manager)        = m.systems
 
 	function all_components(::Type{T}, manager::Manager) where {T<:ComponentData}
 		comps = AbstractComponent[]

@@ -43,6 +43,10 @@ end
 	return @inbounds s.data[packed_id(s, i)]
 end
 
+Base.@propagate_inbounds Base.pointer(s::LooseVector, i) = pointer(s.data, s.indices[i])
+
+packed_pointer(s::LooseVector, i) = pointer(s.packed, i)
+
 @inline function Base.pop!(s::LooseVector, i)
 	@boundscheck if !in(i, s)
 		throw(BoundsError(s, i))
@@ -70,59 +74,26 @@ end
 Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 	mapreduce(f, op, view(A.data, 1:length(A)); kwargs...) 
 
-struct LooseIterator{T}
-	vecs::T
-	shortest_vec_length::Int
-	shortest_vec_id::Int
-	function LooseIterator(vecs::LooseVector...)
-		minl  = typemax(Int)
-		minid = 0
-		for (i, s) in enumerate(vecs) 
-			if length(s) < minl
-				minl = length(s)
-				minid = i
-			end
-		end
-
-		new{typeof(vecs)}(vecs, minl, minid)
+struct ZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator}
+	datas::T
+	set_iterator::ZI
+	function ZippedLooseIterator(vecs::LooseVector...)
+		iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
+		datas    = map(x -> x.data, vecs)
+		new{typeof(datas), typeof(iterator)}(datas, iterator)
 	end
 end
 
-Base.zip(s::LooseVector...) = LooseIterator(s...)::LooseIterator{typeof(s)}
+Base.zip(s::LooseVector...) = ZippedLooseIterator(s...)
 
-Base.length(it::LooseIterator) = it.shortest_vec_length
+Base.length(it::ZippedLooseIterator) = length(it.set_iterator)
 
-function all_have_index(id, vecs)
-	for s in vecs
-		if !in(id, s)
-			return false
-		end
-	end
-	return true
+Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=1)
+	n = iterate(it.set_iterator, state)
+	n === nothing && return n
+	map((x, y) -> (x, y[x]), n[1], it.datas), n[2]
 end
 
-function Base.iterate(it::LooseIterator, state=0)
-	state += 1
-	if state > length(it)
-		return nothing
-	end
 
-	@inbounds id = it.vecs[it.shortest_vec_id].indices.packed[state]
-	if !all_have_index(id, it.vecs)
-		return iterate(it, state)
-	end
-	return map(x->x[id], it.vecs), state
-end
 
-function Base.iterate(e::Base.Enumerate{<:LooseIterator}, state=0)
-	state += 1
-	it = e.itr
-	if state > length(it)
-		return nothing
-	end
-	@inbounds id = it.vecs[it.shortest_vec_id].indices.packed[state]
-	if !all_have_index(id, it.vecs)
-		return iterate(e, state)
-	end
-	return (id, map(x->x[id], it.vecs)), state
-end
+

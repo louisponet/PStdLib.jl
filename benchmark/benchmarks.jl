@@ -123,7 +123,7 @@ function update(sys::Oscillator)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * dt
-		spat[it] = Spatial(new_p, new_v)
+		@inbounds spat[it] = Spatial(new_p, new_v)
 	end
 end
 
