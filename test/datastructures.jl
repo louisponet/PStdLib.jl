@@ -33,7 +33,7 @@ end
 
 
 const set1 = LooseVector{Int}()
-tids1 = unique(rand(1:900, 300))
+tids1 = unique(rand(1:900, 30))
 for i in tids1
 	set1[i] = 23
 end
@@ -43,7 +43,7 @@ end
 @test sum(set1) == 23*length(tids1)
 
 const set2 = LooseVector{Int}()
-tids2 = rand(1:900, 300)
+tids2 = rand(1:900, 3000)
 for i in tids2
 	set2[i] = 55
 end
@@ -56,7 +56,7 @@ end
 for (i, (s1, s2)) in enumerate(zip(set1, set2))
 	global test_n += s1[2]+s2[2]
 end
-@test 2*n == test_n
+@test 2n == test_n
 
 # deleteat!(set1, tids1[23])
 # @test !in(tids[23], set1)

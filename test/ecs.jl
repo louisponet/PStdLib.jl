@@ -33,6 +33,20 @@ function update(sys::Oscillator)
 		spat[id1] = Spatial(new_p, new_v)
 	end
 end
+
+function pointer_update(sys::Oscillator)
+	spat   = sys[Spatial]
+	spring = sys[Spring]
+	@inbounds for ((id1, p_spat), (id2, p_spr)) in pointer_zip(spat, spring)
+		e_spat = unsafe_load(p_spat)
+		spr = unsafe_load(p_spr)
+		v_prev   = e_spat.v
+		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+		new_p    = e_spat.p + v_prev * 1.0
+		unsafe_store!(p_spat, Spatial(new_p, new_v))
+	end
+end
+
 m = Manager(Spatial, Spring)
 
 function create_fill(m)
@@ -49,8 +63,11 @@ end
 create_fill(m)
 O = Oscillator(m)
 
-for i = 1:5
+for i = 1:3
 	update(O)
+end
+for i = 1:2
+	pointer_update(O)
 end
 
 @test m[Spatial, Entity(230)].p[2] == 5.8006

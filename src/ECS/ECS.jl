@@ -102,6 +102,7 @@ module ECS
 	end
 
 	Base.zip(cs::Component...) = zip(data.(cs)...)
+	DataStructures.pointer_zip(cs::Component...) = pointer_zip(data.(cs)...)
 
 	function Base.setindex!(c::SharedComponent,v, i)
 		id = findfirst(isequal(v), c.shared)

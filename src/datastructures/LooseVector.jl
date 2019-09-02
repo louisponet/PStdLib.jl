@@ -88,12 +88,31 @@ Base.zip(s::LooseVector...) = ZippedLooseIterator(s...)
 
 Base.length(it::ZippedLooseIterator) = length(it.set_iterator)
 
-Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=1)
+Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
 	map((x, y) -> (x, y[x]), n[1], it.datas), n[2]
 end
 
+struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator}
+	datas::T
+	set_iterator::ZI
+	function PointerZippedLooseIterator(vecs::LooseVector...)
+		iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
+		datas    = map(x -> x.data, vecs)
+		new{typeof(datas), typeof(iterator)}(datas, iterator)
+	end
+end
+
+pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
+
+Base.length(it::PointerZippedLooseIterator) = length(it.set_iterator)
+
+Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=0)
+	n = iterate(it.set_iterator, state)
+	n === nothing && return n
+	map((x, y) -> (x, pointer(y, x)), n[1], it.datas), n[2]
+end
 
 
 

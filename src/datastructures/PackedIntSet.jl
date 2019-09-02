@@ -117,7 +117,7 @@ Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)::ZippedPackedInt
 Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
 
 
-Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=1)
+Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=0)
 	state += 1
 	if state > length(it)
 		return nothing
