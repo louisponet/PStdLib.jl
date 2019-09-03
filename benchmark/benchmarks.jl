@@ -86,8 +86,8 @@ struct Spatial <: ComponentData
 	v::Vec3{Float64}
 end
 
-struct Oscillator <: System
-	data ::SystemData
+struct Oscillator{S<:SystemData} <: System
+	data::S
 end
 
 function Oscillator(m::Manager)
