@@ -116,14 +116,13 @@ function create_fill_ecs(m)
 end
 
 function update(sys::Oscillator)
-	spat   = sys[Spatial]
-	spring = sys[Spring]
-	dt     = 1.0
-	for ((id1, e_spat), (id2,spr)) in zip(spat, spring)
-		v_prev   = e_spat.v
-		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
-		new_p    = e_spat.p + v_prev * dt
-		@inbounds spat[id1] = Spatial(new_p, new_v)
+	map(sys, Spatial, Spring) do spat, spring
+		for ((id1, e_spat), (id2,spr)) in zip(spat, spring)
+			v_prev   = e_spat.v
+			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+			new_p    = e_spat.p + v_prev * 1.0
+			@inbounds spat[id1] = Spatial(new_p, new_v)
+		end
 	end
 end
 

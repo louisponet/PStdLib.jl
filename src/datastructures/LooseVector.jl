@@ -74,19 +74,22 @@ end
 Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 	mapreduce(f, op, view(A.data, 1:length(A)); kwargs...) 
 
-struct ZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator}
+abstract type AbstractZippedLooseIterator end
+
+function (::Type{T})(vecs::LooseVector...) where {T<:AbstractZippedLooseIterator}
+	iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
+	datas    = map(x -> x.data, vecs)
+	T(datas, iterator)
+end
+
+@inline Base.length(it::AbstractZippedLooseIterator) = length(it.set_iterator)
+
+struct ZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
-	function ZippedLooseIterator(vecs::LooseVector...)
-		iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
-		datas    = map(x -> x.data, vecs)
-		new{typeof(datas), typeof(iterator)}(datas, iterator)
-	end
 end
 
 Base.zip(s::LooseVector...) = ZippedLooseIterator(s...)
-
-Base.length(it::ZippedLooseIterator) = length(it.set_iterator)
 
 Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
@@ -94,19 +97,12 @@ Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
 	map((x, y) -> (x, y[x]), n[1], it.datas), n[2]
 end
 
-struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator}
+struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
-	function PointerZippedLooseIterator(vecs::LooseVector...)
-		iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
-		datas    = map(x -> x.data, vecs)
-		new{typeof(datas), typeof(iterator)}(datas, iterator)
-	end
 end
 
 pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
-
-Base.length(it::PointerZippedLooseIterator) = length(it.set_iterator)
 
 Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)

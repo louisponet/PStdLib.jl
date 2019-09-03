@@ -41,10 +41,20 @@ module ECS
 
 	Base.eltype(::AbstractComponent{T}) where T = T
 
-	@inline data(c::AbstractComponent) = c.data
+	@inline component_data(c::AbstractComponent) = c.data
 	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
 
+	"""
+	The most basic component type.
+	Holds a `PackedIntSet` that represents whether an entity has the component, and a data vector that
+	has the component_datas contiguously stored in memory in the same order as the entities indices inside
+	the `PackedIntSet` (e.g. without any sorting or popping, the order in which the component was added
+	to the entities).
 
+	Indexing into a component with an `Entity` will return the component_data linked to that entity,
+	indexing with a regular Int will return directly the `ComponentData` that is stored in the data
+	vector at that index, i.e. generally not the component_data linked to the `Entity` with that `Int` as id.
+	"""
 	struct Component{T} <: AbstractComponent{T}
 		id  ::Int
 		data::VECTORTYPE{T}
@@ -57,42 +67,78 @@ module ECS
 		end
 	end
 
-	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Entity) = c.data[id(e)]
-	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = c.data.data[e]
+	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Entity) = component_data(c)[id(e)]
+	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = component_data(c).data[e]
 
-	@inline Base.@propagate_inbounds Base.pointer(c::Component, e::Entity) = pointer(c.data, id(e))
+	@inline Base.@propagate_inbounds Base.pointer(c::Component, e::Entity) = pointer(component_data(c), id(e))
 	@inline Base.pointer(c::Component, e::Int)    = packed_pointer(c.data, i)
 
-	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Entity) = c.data[id(e)] = v
-	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Int)    = c.data.data[e] = v
+	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Entity) = component_data(c)[id(e)] = v
+	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Int) = component_data(c).data[e] = v
 
-	struct ComponentDict <: AbstractDict{DataType, Component}
-		dict::Dict{DataType, Component}
-	end
+	@inline Base.empty!(c::Component) = empty!(component_data(c))
+	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
 
-	ComponentDict() = ComponentDict(Dict{DataType, Component}())
-
-	@inline Base.getindex(c::ComponentDict, ::Type{T}) where {T<:ComponentData} =
-		c.dict[T]::Component{T}
-
-	@inline Base.setindex!(c::ComponentDict, v, ::Type{T}) where {T<:ComponentData} =
-		c.dict[T] = v
-
-	@inline Base.length(c::ComponentDict) = length(c.dict)
-
-	@inline Base.iterate(c::ComponentDict, args...) = iterate(c.dict, args...)
+	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
 
 	#maybe this shouldn't be called remove_entity!
 	remove_entity!(c::AbstractComponent, e::Entity) =
-		pop!(c.data, id(e))
+		pop!(component_data(c), id(e))
 
+
+	"""
+	Similar to a normal `Component` however the data that is locked to the underlying `PackedIntSet`
+	is now the indices into the vector with shared component_data.
+
+	Indexing is similar to the normal `Component` however indexing with an `Int` now returns the shared data
+	at that index.
+	"""
 	struct SharedComponent{T<:ComponentData} <: AbstractComponent{T}
 		id    ::Int
-		data  ::VECTORTYPE{T} #These are basically the ids
+		data  ::VECTORTYPE{Int} #These are basically the ids
 		shared::Vector{T}
+		function SharedComponent{T}(m::AbstractManager) where {T<:ComponentData}
+			n = length(components(m)) + 1
+			v = VECTORTYPE{Int}()
+			c = new{T}(n, v, T[])
+			m.components[T] = c
+			return c
+		end
 	end
 
+	@inline shared_data(c::SharedComponent) = c.shared
+
+	@inline Base.@propagate_inbounds Base.getindex(c::SharedComponent, e::Int) =
+		shared_data(c)[component_data(c).data[e]]
+
+	@inline Base.@propagate_inbounds function Base.getindex(c::SharedComponent, e::Entity)
+		index = component_data(c)[id(e)]
+		return c[index]
+	end
+
+	@inline Base.@propagate_inbounds Base.pointer(c::SharedComponent, e::Entity) =
+			pointer(shared_data(c), component_data(c)[id(e)])
+
+	@inline Base.pointer(c::SharedComponent, e::Int) = pointer(shared_data(c), i)
+
+	@inline Base.@propagate_inbounds function Base.setindex!(c::SharedComponent, v, e::Entity)
+		sd = shared_data(c)
+		datid = findfirst(x -> x === v, sd)
+		if datid === nothing
+			push!(sd, v)
+			component_data(c)[id(e)] = length(sd)
+		else
+			component_data(c)[id(e)] = datid
+		end
+	end
+	@inline Base.@propagate_inbounds Base.setindex!(c::SharedComponent, v, e::Int) = shared_data(c)[e] = v
+	@inline Base.empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
+
+	Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
+
 	abstract type System end
+
+	Base.map(f, s::System, T...) = f(map(x -> getindex(s, x), T)...)
 
 	struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
@@ -101,8 +147,20 @@ module ECS
 		systems      ::Vector{System}
 	end
 
-	Base.zip(cs::Component...) = zip(data.(cs)...)
-	DataStructures.pointer_zip(cs::Component...) = pointer_zip(data.(cs)...)
+	function (::Type{T})(comps::AbstractComponent...) where {T<:DataStructures.AbstractZippedLooseIterator}
+		iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> component_data(x).indices, comps)...)
+		T(comps, iterator)
+	end
+
+	Base.zip(cs::Component...) = zip(component_data.(cs)...)
+
+	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
+
+	DataStructures.pointer_zip(cs::Component...) =
+		pointer_zip(component_data.(cs)...)
+
+	DataStructures.pointer_zip(cs::AbstractComponent...) =
+		DataStructures.PointerZippedLooseIterator(cs...)
 
 	function Base.setindex!(c::SharedComponent,v, i)
 		id = findfirst(isequal(v), c.shared)
@@ -139,15 +197,27 @@ module ECS
 	disengage!(s::System)= data(s).engaged = false
 
 	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} =
-		data(s).components[T]::Component{T}
+		data(s).components[T]
 
 	Manager() = Manager(Entity[], Entity[], ComponentDict(), System[])
 
-	function Manager(components...)
+	function Manager(components::Type{<:ComponentData}...)
 		m = Manager()
 		comps = ComponentDict()
 		for c in components
 			comps[c] = Component{c}(m)
+		end
+		return m
+	end
+
+	function Manager(components::T, shared_components::T) where {T<:Union{NTuple{N,DataType} where N,AbstractVector{DataType}}}
+		m = Manager()
+		comps = ComponentDict()
+		for c in components
+			comps[c] = Component{c}(m)
+		end
+		for c in shared_components
+			comps[c] = SharedComponent{c}(m)
 		end
 		return m
 	end
@@ -229,9 +299,7 @@ module ECS
 		end
 	end
 
-	Base.empty!(c::Component) = empty!(c.data)
 
 	Base.getindex(d::Dict, e::Entity) = d[id(e)]
 	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
-
 end
