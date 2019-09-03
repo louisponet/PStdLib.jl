@@ -115,7 +115,7 @@ function create_fill_ecs(m)
 	end
 end
 
-function update(sys::Oscillator)
+function update_map(sys::Oscillator)
 	map(sys, Spatial, Spring) do spat, spring
 		for ((id1, e_spat), (id2,spr)) in zip(spat, spring)
 			v_prev   = e_spat.v
@@ -123,6 +123,15 @@ function update(sys::Oscillator)
 			new_p    = e_spat.p + v_prev * 1.0
 			@inbounds spat[id1] = Spatial(new_p, new_v)
 		end
+	end
+end
+function update(sys::Oscillator)
+	spat, spring = sys[Spatial], sys[Spring]
+	for ((id1, e_spat), (id2,spr)) in zip(spat, spring)
+		v_prev   = e_spat.v
+		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+		new_p    = e_spat.p + v_prev * 1.0
+		@inbounds spat[id1] = Spatial(new_p, new_v)
 	end
 end
 
@@ -136,6 +145,9 @@ SUITE["ECS"]["fill entities"] =
 
 SUITE["ECS"]["update oscillator"] =
 	@benchmarkable update(o) setup=(m=Manager(Spatial, Spring); o=Oscillator(m); create_fill_ecs(m))
+
+SUITE["ECS"]["update oscillator mapped"] =
+	@benchmarkable update_map(o) setup=(m=Manager(Spatial, Spring); o=Oscillator(m); create_fill_ecs(m))
 
 
 
