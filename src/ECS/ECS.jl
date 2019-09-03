@@ -40,6 +40,7 @@ module ECS
 	abstract type AbstractComponent{T<:ComponentData} end
 
 	Base.eltype(::AbstractComponent{T}) where T = T
+	Base.eltype(::Type{AbstractComponent{T}}) where T = T
 
 	@inline component_data(c::AbstractComponent) = c.data
 	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
@@ -181,25 +182,26 @@ module ECS
 	#overloaded
 	#TODO: Speedup: maybe using Tuples of components might be better,
 	#               since technically one should know what components to use.
-	struct SystemData
+	struct SystemData{T<:Tuple}
 		engaged::Bool 
 		#These are the components that the system will work with
-		components::ComponentDict
+		components::T
 		requested_components::Vector{Type{ComponentData}}
 	end
 
 	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
-		comps = ComponentDict()
+		comps = AbstractComponent[]
 		requested_components = Type{ComponentData}[]
 		for ct in component_types
 			if ct ∈ keys(components(manager))
-				comps[ct] = manager[ct]
+				push!(comps, manager[ct])
 			else
 				push!(requested_components, ct)
 			end
 		end
+		ct = (comps...,)
 		engaged = isempty(requested_components) && engaged
-		return SystemData(engaged, comps, requested_components)
+		return SystemData{typeof(ct)}(engaged, ct, requested_components)
 	end
 
 	isengaged(s::System) = data(s).engaged
@@ -208,8 +210,21 @@ module ECS
 
 	requested_components(s::System) = data(s).requested_components
 
-	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} =
-		data(s).components[T]
+	# @generated function Base.getindex(s::System{CT}, ::Type{T}) where {CT,T<:ComponentData}
+	# 	id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
+	# 	quote
+	# 		return data(s).components[$id]
+	# 	end
+	# end
+	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} = 
+		data(s)[T]
+
+	@generated function Base.getindex(s::SystemData{CT}, ::Type{T}) where {CT,T<:ComponentData}
+		id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
+		quote
+			return s.components[$id]
+		end
+	end
 
 	Manager() = Manager(Entity[], Entity[], ComponentDict(), System[])
 
@@ -311,7 +326,6 @@ module ECS
 		end
 	end
 
-
 	Base.getindex(d::Dict, e::Entity) = d[id(e)]
 	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
 
@@ -321,10 +335,9 @@ module ECS
 		if id !== nothing
 			pop!(req_comps, id)
 		end
-		s.components[T] = c
-		if isempty(req_comps)
-			engage!(s)
-		end
+		new_comps = (data(s).components..., c)
+		engaged = isempty(req_comps) ? true : false
+		s.data = SystemData(engaged, new_comps, req_comps)
 	end
 
 	function register!(m::Manager, c::AbstractComponent{T}) where {T}

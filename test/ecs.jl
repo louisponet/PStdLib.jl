@@ -5,6 +5,7 @@ import PStdLib.ECS: Manager, ComponentData, Component, Entity, System, SystemDat
 using PStdLib.DataStructures
 using PStdLib.Geometry
 using PStdLib
+#%%
 @with_kw struct Spring <: ComponentData
 	center::Point3{Float64} = zero(Point3{Float64})
 	k     ::Float64  = 0.01
@@ -23,13 +24,12 @@ function Oscillator(m::Manager)
 	return O
 end
 function update(sys::Oscillator)
-	map(sys, Spatial, Spring) do spat, spring
-		@inbounds for ((id1, e_spat), (id2, spr)) in zip(spat, spring)
-			v_prev   = e_spat.v
-			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
-			new_p    = e_spat.p + v_prev * 1.0
-			spat[id1] = Spatial(new_p, new_v)
-		end
+	spat, spring = sys[Spatial], sys[Spring]
+	@inbounds for ((id1, e_spat), (id2, spr)) in zip(spat, spring)
+		v_prev   = e_spat.v
+		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+		new_p    = e_spat.p + v_prev * 1.0
+		spat[id1] = Spatial(new_p, new_v)
 	end
 end
 
