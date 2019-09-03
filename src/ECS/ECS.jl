@@ -138,7 +138,6 @@ module ECS
 
 	abstract type System end
 
-	Base.map(f, s::System, T...) = f(map(x -> getindex(s, x), T)...)
 
 	struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
@@ -161,6 +160,8 @@ module ECS
 
 	DataStructures.pointer_zip(cs::AbstractComponent...) =
 		DataStructures.PointerZippedLooseIterator(cs...)
+
+	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
 
 	function Base.setindex!(c::SharedComponent,v, i)
 		id = findfirst(isequal(v), c.shared)

@@ -104,13 +104,13 @@ SUITE["ECS"] = BenchmarkGroup()
 SUITE["ECS"]["creation"] = @benchmarkable ecs_creation()
 	
 function create_fill_ecs(m)
-	spat   = m[Spatial]
-	spring = m[Spring]
-	for i = 1:1000000
-		e = Entity(m, i)
-		spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
-		if i%2 == 0
-			spring[e] = Spring()
+	map(m, Spatial, Spring) do spat, spring
+		for i = 1:1000000
+			e = Entity(m, i)
+			spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
+			if i%2 == 0
+				spring[e] = Spring()
+			end
 		end
 	end
 end
