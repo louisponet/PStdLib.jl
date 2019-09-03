@@ -45,7 +45,7 @@ end
 
 Base.@propagate_inbounds Base.pointer(s::LooseVector, i) = pointer(s.data, s.indices[i])
 
-packed_pointer(s::LooseVector, i) = pointer(s.packed, i)
+packed_pointer(s::LooseVector, i) = pointer(s.data, i)
 
 @inline function Base.pop!(s::LooseVector, i)
 	@boundscheck if !in(i, s)

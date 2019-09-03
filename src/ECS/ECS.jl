@@ -62,7 +62,7 @@ module ECS
 			n = length(components(m)) + 1
 			v = VECTORTYPE{T}()
 			c = new{T}(n, v)
-			m.components[T] = c
+			register!(m, c)
 			return c
 		end
 	end
@@ -71,7 +71,7 @@ module ECS
 	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = component_data(c).data[e]
 
 	@inline Base.@propagate_inbounds Base.pointer(c::Component, e::Entity) = pointer(component_data(c), id(e))
-	@inline Base.pointer(c::Component, e::Int)    = packed_pointer(c.data, i)
+	@inline Base.pointer(c::Component, e::Int) = DataStructures.packed_pointer(c.data, e)
 
 	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Entity) = component_data(c)[id(e)] = v
 	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Int) = component_data(c).data[e] = v
@@ -101,7 +101,7 @@ module ECS
 			n = length(components(m)) + 1
 			v = VECTORTYPE{Int}()
 			c = new{T}(n, v, T[])
-			m.components[T] = c
+			register!(m, c)
 			return c
 		end
 	end
@@ -113,13 +113,13 @@ module ECS
 
 	@inline Base.@propagate_inbounds function Base.getindex(c::SharedComponent, e::Entity)
 		index = component_data(c)[id(e)]
-		return c[index]
+		return shared_data(c)[index]
 	end
 
 	@inline Base.@propagate_inbounds Base.pointer(c::SharedComponent, e::Entity) =
 			pointer(shared_data(c), component_data(c)[id(e)])
 
-	@inline Base.pointer(c::SharedComponent, e::Int) = pointer(shared_data(c), i)
+	@inline Base.pointer(c::SharedComponent, e::Int) = pointer(shared_data(c), component_data(c).data[e])
 
 	@inline Base.@propagate_inbounds function Base.setindex!(c::SharedComponent, v, e::Entity)
 		sd = shared_data(c)
@@ -131,13 +131,15 @@ module ECS
 			component_data(c)[id(e)] = datid
 		end
 	end
-	@inline Base.@propagate_inbounds Base.setindex!(c::SharedComponent, v, e::Int) = shared_data(c)[e] = v
+
+	@inline Base.@propagate_inbounds Base.setindex!(c::SharedComponent, v, e::Int) =
+		shared_data(c)[component_data(c).data[e]] = v
+
 	@inline Base.empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
 
 	Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
 
 	abstract type System end
-
 
 	struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
@@ -183,19 +185,28 @@ module ECS
 		engaged::Bool 
 		#These are the components that the system will work with
 		components::ComponentDict
+		requested_components::Vector{Type{ComponentData}}
 	end
 
 	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
 		comps = ComponentDict()
+		requested_components = Type{ComponentData}[]
 		for ct in component_types
-			comps[ct] = manager[ct]
+			if ct ∈ keys(components(manager))
+				comps[ct] = manager[ct]
+			else
+				push!(requested_components, ct)
+			end
 		end
-		return SystemData(engaged, comps)
+		engaged = isempty(requested_components) && engaged
+		return SystemData(engaged, comps, requested_components)
 	end
 
 	isengaged(s::System) = data(s).engaged
 	engage!(s::System)   = data(s).engaged = true
 	disengage!(s::System)= data(s).engaged = false
+
+	requested_components(s::System) = data(s).requested_components
 
 	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} =
 		data(s).components[T]
@@ -303,4 +314,21 @@ module ECS
 
 	Base.getindex(d::Dict, e::Entity) = d[id(e)]
 	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
+
+	function register!(s::System, c::AbstractComponent{T}) where {T}
+		req_comps = requested_components(s)
+		id = findfirst(x -> x<:T, req_comps)
+		if id !== nothing
+			pop!(req_comps, id)
+		end
+		s.components[T] = c
+		if isempty(req_comps)
+			engage!(s)
+		end
+	end
+
+	function register!(m::Manager, c::AbstractComponent{T}) where {T}
+		map(x -> register!(x, c), systems(m))
+		components(m)[T] = c
+	end
 end

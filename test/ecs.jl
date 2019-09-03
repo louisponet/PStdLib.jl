@@ -24,9 +24,7 @@ function Oscillator(m::Manager)
 end
 function update(sys::Oscillator)
 	map(sys, Spatial, Spring) do spat, spring
-		spat   = sys[Spatial]
-		spring = sys[Spring]
-		for ((id1, e_spat), (id2, spr)) in zip(spat, spring)
+		@inbounds for ((id1, e_spat), (id2, spr)) in zip(spat, spring)
 			v_prev   = e_spat.v
 			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 			new_p    = e_spat.p + v_prev * 1.0
@@ -51,13 +49,13 @@ end
 m = Manager(Spatial, Spring)
 
 function create_fill(m)
-	spat   = m[Spatial]
-	spring = m[Spring]
-	for i = 1:1000000
-		e = Entity(m, i)
-		spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
-		if i%2 == 0
-			spring[e] = Spring()
+	map(m, Spatial, Spring) do spat, spring
+		for i = 1:1000000
+			e = Entity(m, i)
+			spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
+			if i%2 == 0
+				spring[e] = Spring()
+			end
 		end
 	end
 end
@@ -71,4 +69,15 @@ for i = 1:2
 	pointer_update(O)
 end
 
+@test m[Spatial, Entity(230)].p[2] == 5.8006
+
+m = Manager((Spatial,), (Spring,))
+create_fill(m)
+O = Oscillator(m)
+for i = 1:3
+	update(O)
+end
+for i = 1:2
+	pointer_update(O)
+end
 @test m[Spatial, Entity(230)].p[2] == 5.8006
