@@ -119,11 +119,11 @@ function update(sys::Oscillator)
 	spat   = sys[Spatial]
 	spring = sys[Spring]
 	dt     = 1.0
-	for (it, (e_spat, spr)) in enumerate(zip(spat, spring))
+	for ((id1, e_spat), (id2,spr)) in zip(spat, spring)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * dt
-		@inbounds spat[it] = Spatial(new_p, new_v)
+		@inbounds spat[id1] = Spatial(new_p, new_v)
 	end
 end
 
