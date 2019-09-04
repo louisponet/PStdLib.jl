@@ -51,8 +51,7 @@ module ECS
 
 	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
 
-	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
-	Base.zip(cs::Enumerate{<:AbstractComponent}...) = DataStructures.ZippedLooseIterator(cs...)
+	Base.zip(cs::Union{Enumerate{<:AbstractComponent},AbstractComponent}...) = DataStructures.ZippedLooseIterator(cs...)
 
 	Base.isempty(c::AbstractComponent) = isempty(component_data(c))
 
@@ -103,6 +102,7 @@ module ECS
 	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
 
 	Base.zip(cs::Component...) = zip(component_data.(cs)...)
+	Base.zip(cs::Union{Enumerate{<:Component}, Component}...) = DataStructures.ZippedLooseIterator(cs...)
 
 	DataStructures.pointer_zip(cs::Component...) =
 		pointer_zip(component_data.(cs)...)

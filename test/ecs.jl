@@ -25,7 +25,7 @@ function Oscillator(m::Manager)
 end
 function update(sys::Oscillator)
 	spat, spring = sys[Spatial], sys[Spring]
-	@inbounds for ((id1, e_spat), (id2, spr)) in zip(enumerate(spat), enumerate(spring))
+	@inbounds for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * 1.0
@@ -35,7 +35,7 @@ end
 
 function pointer_update(sys::Oscillator)
 	map(sys, Spatial, Spring) do spat, spring
-		@inbounds for ((id1, p_spat), (id2, p_spr)) in pointer_zip(spat, spring)
+		@inbounds for (p_spat, p_spr) in pointer_zip(spat, spring)
 			e_spat = unsafe_load(p_spat)
 			spr = unsafe_load(p_spr)
 			v_prev   = e_spat.v
@@ -50,11 +50,11 @@ m = Manager(Spatial, Spring)
 
 function create_fill(m)
 	map(m, Spatial, Spring) do spat, spring
-		for i = 1:1000000
+		for i = 1:100
 			e = Entity(m, i)
-			spat[e] = Spatial(Point3(30.0,1.0,1.0), Vec3(1.0,1.0,1.0))
+			spat[e] = Spatial(Point3(Float64(i),1.0,1.0), Vec3(1.0,Float64(i),1.0))
 			if i%2 == 0
-				spring[e] = Spring()
+				spring[e] = Spring(k=Float64(i)/100)
 			end
 		end
 	end
@@ -69,7 +69,8 @@ for i = 1:2
 	pointer_update(O)
 end
 
-@test m[Spatial, Entity(230)].p[2] == 5.8006
+
+@test sum(map(x->m[Spatial, Entity(x)].p[1], 1:100)) == -5605.33
 
 m = Manager((Spatial,), (Spring,))
 create_fill(m)
@@ -80,4 +81,4 @@ end
 for i = 1:2
 	pointer_update(O)
 end
-@test m[Spatial, Entity(230)].p[2] == 5.8006
+@test sum(map(x->m[Spatial, Entity(x)].p[1], 1:100)) == -5605.33

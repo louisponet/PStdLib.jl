@@ -89,7 +89,7 @@ struct ZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedL
 	set_iterator::ZI
 end
 
-Base.zip(s::LooseVector...) = ZippedLooseIterator(s...)
+Base.zip(s::Union{Base.Enumerate{<:LooseVector}, LooseVector}...) = ZippedLooseIterator(s...)
 
 @inline iterfunc(data::AbstractVector, i::Integer) = iterate(data, i)
 @inline iterfunc(data::Base.Enumerate{<:AbstractVector}, i::Integer) = iterate(data, (i,i))
@@ -110,7 +110,7 @@ pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
 Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
-	map((x, y) -> (x, pointer(y, x)), n[1], it.datas), n[2]
+	map((x, y) -> pointer(y, x), n[1], it.datas), n[2]
 end
 
 
