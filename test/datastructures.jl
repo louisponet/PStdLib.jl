@@ -51,10 +51,10 @@ end
 n = (23+55) * length(intersect(tids1, tids2))
 test_n = 0
 for (s1, s2) in zip(set1, set2)
-	global test_n += s1[2]+s2[2]
+	global test_n += s1+s2
 end
 for (i, (s1, s2)) in enumerate(zip(set1, set2))
-	global test_n += s1[2]+s2[2]
+	global test_n += s1+s2
 end
 @test 2n == test_n
 

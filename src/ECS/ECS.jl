@@ -1,6 +1,8 @@
 module ECS
 	using ..DataStructures
 	import ..getfirst
+	import Base.Enumerate
+
 	export System
 	export SystemData
 	export ComponentData
@@ -45,10 +47,21 @@ module ECS
 	Base.eltype(::Type{AbstractComponent{T}}) where T = T
 
 	@inline component_data(c::AbstractComponent) = c.data
-	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
-	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
+	@inline component_data(c::Enumerate{<:AbstractComponent}) = component_data(c.itr)
 
-	function (::Type{T})(comps::AbstractComponent...) where {T<:DataStructures.AbstractZippedLooseIterator}
+	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
+
+	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
+	Base.zip(cs::Enumerate{<:AbstractComponent}...) = DataStructures.ZippedLooseIterator(cs...)
+
+	Base.isempty(c::AbstractComponent) = isempty(component_data(c))
+
+	Base.length(c::AbstractComponent) = length(component_data(c))
+
+	@inline DataStructures.iterfunc(c::AbstractComponent, i::Integer) = iterate(c, i)
+	@inline DataStructures.iterfunc(c::Enumerate{<:AbstractComponent}, i::Integer) = iterate(c, (i,i))
+
+	function (::Type{T})(comps::Union{AbstractComponent, Enumerate{<:AbstractComponent}}...) where {T<:DataStructures.AbstractZippedLooseIterator}
 		iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> component_data(x).indices, comps)...)
 		T(comps, iterator)
 	end
@@ -153,7 +166,16 @@ module ECS
 
 	@inline Base.empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
 
-	Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
+	function Base.iterate(c::SharedComponent, state=1)
+		state > length(c) && return nothing
+		return c[state], state+1
+	end
+
+	function Base.iterate(e::Enumerate{<:SharedComponent}, state=(1,))
+		n = iterate(component_data(e.itr), state[1])
+		n === nothing && return n
+		return (state[1], shared_data(e.itr)[n[1]]), n[2]
+	end
 
 	abstract type System end
 
@@ -188,7 +210,7 @@ module ECS
 	struct SystemData{T<:Tuple}
 		engaged::Bool 
 		#These are the components that the system will work with
-		components::T
+	components::T
 		requested_components::Vector{Type{ComponentData}}
 	end
 

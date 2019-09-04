@@ -43,7 +43,7 @@ end
 	return @inbounds s.data[packed_id(s, i)]
 end
 
-Base.@propagate_inbounds Base.pointer(s::LooseVector, i) = pointer(s.data, s.indices[i])
+Base.@propagate_inbounds Base.pointer(s::LooseVector, i::Integer) where {T} = pointer(s.data, i)
 
 packed_pointer(s::LooseVector, i) = pointer(s.data, i)
 
@@ -77,8 +77,8 @@ Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 abstract type AbstractZippedLooseIterator end
 
 function (::Type{T})(vecs::LooseVector...) where {T<:AbstractZippedLooseIterator}
+	datas = map(x->x.data, vecs)
 	iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
-	datas    = map(x -> x.data, vecs)
 	T(datas, iterator)
 end
 
@@ -91,10 +91,13 @@ end
 
 Base.zip(s::LooseVector...) = ZippedLooseIterator(s...)
 
+@inline iterfunc(data::AbstractVector, i::Integer) = iterate(data, i)
+@inline iterfunc(data::Base.Enumerate{<:AbstractVector}, i::Integer) = iterate(data, (i,i))
+
 Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
-	map((x, y) -> (x, y[x]), n[1], it.datas), n[2]
+	map((x, y) -> iterfunc(y, x)[1], n[1], it.datas), n[2]
 end
 
 struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
