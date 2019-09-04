@@ -39,11 +39,20 @@ module ECS
 
 	abstract type AbstractComponent{T<:ComponentData} end
 
+	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
+
 	Base.eltype(::AbstractComponent{T}) where T = T
 	Base.eltype(::Type{AbstractComponent{T}}) where T = T
 
 	@inline component_data(c::AbstractComponent) = c.data
-	@inline has(c::AbstractComponent, e::Entity) = in(id(e), data(c))
+	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
+	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
+
+	function (::Type{T})(comps::AbstractComponent...) where {T<:DataStructures.AbstractZippedLooseIterator}
+		iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> component_data(x).indices, comps)...)
+		T(comps, iterator)
+	end
+
 
 	"""
 	The most basic component type.
@@ -80,7 +89,13 @@ module ECS
 	@inline Base.empty!(c::Component) = empty!(component_data(c))
 	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
 
-	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
+	Base.zip(cs::Component...) = zip(component_data.(cs)...)
+
+	DataStructures.pointer_zip(cs::Component...) =
+		pointer_zip(component_data.(cs)...)
+
+	DataStructures.pointer_zip(cs::AbstractComponent...) =
+		DataStructures.PointerZippedLooseIterator(cs...)
 
 	#maybe this shouldn't be called remove_entity!
 	remove_entity!(c::AbstractComponent, e::Entity) =
@@ -142,41 +157,29 @@ module ECS
 
 	abstract type System end
 
-	struct Manager <: AbstractManager
-		entities     ::Vector{Entity}
-		free_entities::Vector{Entity}
-		components   ::ComponentDict
-		systems      ::Vector{System}
-	end
-
-	function (::Type{T})(comps::AbstractComponent...) where {T<:DataStructures.AbstractZippedLooseIterator}
-		iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> component_data(x).indices, comps)...)
-		T(comps, iterator)
-	end
-
-	Base.zip(cs::Component...) = zip(component_data.(cs)...)
-
-	Base.zip(cs::AbstractComponent...) = DataStructures.ZippedLooseIterator(cs...)
-
-	DataStructures.pointer_zip(cs::Component...) =
-		pointer_zip(component_data.(cs)...)
-
-	DataStructures.pointer_zip(cs::AbstractComponent...) =
-		DataStructures.PointerZippedLooseIterator(cs...)
-
-	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
-
-	function Base.setindex!(c::SharedComponent,v, i)
-		id = findfirst(isequal(v), c.shared)
-		if id == nothing
-			id = length(c.shared) + 1
-			push!(c.shared, v)
-		end
-		c.data[i] = id
-	end
-
 	data(s::System) =
 		s.data
+
+	isengaged(s::System) = data(s).engaged
+	engage!(s::System)   = data(s).engaged = true
+	disengage!(s::System)= data(s).engaged = false
+
+	requested_components(s::System) = data(s).requested_components
+
+	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} = 
+		data(s)[T]
+
+	function register!(s::System, c::AbstractComponent{T}) where {T}
+		req_comps = requested_components(s)
+		id = findfirst(x -> x<:T, req_comps)
+		if id !== nothing
+			pop!(req_comps, id)
+		end
+		new_comps = (data(s).components..., c)
+		engaged = isempty(req_comps) ? true : false
+		s.data = SystemData(engaged, new_comps, req_comps)
+	end
+
 
 	#Each system should have this as it's data field, or data() needs to be
 	#overloaded
@@ -189,36 +192,6 @@ module ECS
 		requested_components::Vector{Type{ComponentData}}
 	end
 
-	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
-		comps = AbstractComponent[]
-		requested_components = Type{ComponentData}[]
-		for ct in component_types
-			if ct ∈ keys(components(manager))
-				push!(comps, manager[ct])
-			else
-				push!(requested_components, ct)
-			end
-		end
-		ct = (comps...,)
-		engaged = isempty(requested_components) && engaged
-		return SystemData{typeof(ct)}(engaged, ct, requested_components)
-	end
-
-	isengaged(s::System) = data(s).engaged
-	engage!(s::System)   = data(s).engaged = true
-	disengage!(s::System)= data(s).engaged = false
-
-	requested_components(s::System) = data(s).requested_components
-
-	# @generated function Base.getindex(s::System{CT}, ::Type{T}) where {CT,T<:ComponentData}
-	# 	id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
-	# 	quote
-	# 		return data(s).components[$id]
-	# 	end
-	# end
-	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} = 
-		data(s)[T]
-
 	@generated function Base.getindex(s::SystemData{CT}, ::Type{T}) where {CT,T<:ComponentData}
 		id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
 		quote
@@ -226,6 +199,12 @@ module ECS
 		end
 	end
 
+	struct Manager <: AbstractManager
+		entities     ::Vector{Entity}
+		free_entities::Vector{Entity}
+		components   ::ComponentDict
+		systems      ::Vector{System}
+	end
 	Manager() = Manager(Entity[], Entity[], ComponentDict(), System[])
 
 	function Manager(components::Type{<:ComponentData}...)
@@ -248,6 +227,24 @@ module ECS
 		end
 		return m
 	end
+
+	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
+
+	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
+		comps = AbstractComponent[]
+		requested_components = Type{ComponentData}[]
+		for ct in component_types
+			if ct ∈ keys(components(manager))
+				push!(comps, manager[ct])
+			else
+				push!(requested_components, ct)
+			end
+		end
+		ct = (comps...,)
+		engaged = isempty(requested_components) && engaged
+		return SystemData{typeof(ct)}(engaged, ct, requested_components)
+	end
+
 
 	components(m::Manager)     = m.components
 	entities(m::Manager)       = m.entities
@@ -328,17 +325,6 @@ module ECS
 
 	Base.getindex(d::Dict, e::Entity) = d[id(e)]
 	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
-
-	function register!(s::System, c::AbstractComponent{T}) where {T}
-		req_comps = requested_components(s)
-		id = findfirst(x -> x<:T, req_comps)
-		if id !== nothing
-			pop!(req_comps, id)
-		end
-		new_comps = (data(s).components..., c)
-		engaged = isempty(req_comps) ? true : false
-		s.data = SystemData(engaged, new_comps, req_comps)
-	end
 
 	function register!(m::Manager, c::AbstractComponent{T}) where {T}
 		map(x -> register!(x, c), systems(m))
