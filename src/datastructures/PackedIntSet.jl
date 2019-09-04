@@ -28,7 +28,7 @@ end
 
 @inline function page_offset(s::PackedIntSet, i)
 	page = div(i - 1, length(eltype(s.reverse))) + 1
-	return page, mod1(i, length(eltype(s.reverse)))
+	return page, (i-1) & (length(eltype(s.reverse))-1) + 1
 end
 
 @inline function assure!(s::PackedIntSet{T}, page) where {T}

@@ -175,7 +175,7 @@ module ECS
 	function Base.iterate(e::Enumerate{<:SharedComponent}, state=(1,))
 		n = iterate(component_data(e.itr), state[1])
 		n === nothing && return n
-		return (state[1], shared_data(e.itr)[n[1]]), n[2]
+		return (state[1], shared_data(e.itr)[n[1]]), Base.tail(n)
 	end
 
 	abstract type System end
