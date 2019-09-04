@@ -1,3 +1,5 @@
+import Base.Enumerate
+
 mutable struct LooseVector{T} <: AbstractVector{T}
 	indices::PackedIntSet{Int}
 	data   ::Vector{T}
@@ -8,6 +10,12 @@ mutable struct LooseVector{T} <: AbstractVector{T}
 end
 
 LooseVector{T}() where {T} = LooseVector{T}(T[])
+
+@inline data(s::LooseVector)    = s.data
+@inline indices(s::LooseVector) = s.indices
+
+@inline data(s::Enumerate{<:LooseVector}) = enumerate(s.itr.data)
+@inline indices(s::Enumerate{<:LooseVector}) = s.itr.indices
 
 @inline packed_id(s::LooseVector, i) = packed_id(s.indices, i)
 
@@ -76,9 +84,9 @@ Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 
 abstract type AbstractZippedLooseIterator end
 
-function (::Type{T})(vecs::LooseVector...) where {T<:AbstractZippedLooseIterator}
-	datas = map(x->x.data, vecs)
-	iterator = ZippedPackedIntSetIterator(map(x -> x.indices, vecs)...)
+function (::Type{T})(vecs::Union{LooseVector, Enumerate{<:LooseVector}}...) where {T<:AbstractZippedLooseIterator}
+	datas = map(x->data(x), vecs)
+	iterator = ZippedPackedIntSetIterator(map(x -> indices(x), vecs)...)
 	T(datas, iterator)
 end
 

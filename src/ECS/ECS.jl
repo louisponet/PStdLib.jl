@@ -102,7 +102,8 @@ module ECS
 	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
 
 	Base.zip(cs::Component...) = zip(component_data.(cs)...)
-	Base.zip(cs::Union{Enumerate{<:Component}, Component}...) = DataStructures.ZippedLooseIterator(cs...)
+	Base.zip(cs::Union{Enumerate{<:Component}, Component}...) =
+		DataStructures.ZippedLooseIterator(map(x -> x isa Enumerate ? Enumerate(component_data(x)) : component_data(x), cs)...)
 
 	DataStructures.pointer_zip(cs::Component...) =
 		pointer_zip(component_data.(cs)...)

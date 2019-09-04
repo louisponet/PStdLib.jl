@@ -117,7 +117,7 @@ end
 
 function update_map(sys::Oscillator)
 	map(sys, Spatial, Spring) do spat, spring
-		for ((id1, e_spat), (id2,spr)) in zip(enumerate(spat), enumerate(spring))
+		for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
 			v_prev   = e_spat.v
 			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 			new_p    = e_spat.p + v_prev * 1.0
@@ -128,7 +128,7 @@ end
 
 function update(sys::Oscillator)
 	spat, spring = sys[Spatial], sys[Spring]
-	for ((id1, e_spat), (id2,spr)) in zip(enumerate(spat), enumerate(spring))
+	for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * 1.0
