@@ -41,10 +41,10 @@ end
 	elseif !isassigned(s.reverse, page)
 		p = TypedPage{T}()
 		fill!(p, zero(T))
-		s.reverse[page] = p 
+		@inbounds s.reverse[page] = p 
 		return p, true
 	end
-	return s.reverse[page], false
+	return @inbounds s.reverse[page], false
 end
 
 @inline function Base.push!(s::PackedIntSet, i)
@@ -68,13 +68,13 @@ end
 
 @inline function Base.in(i, s::PackedIntSet)
 	page, offset = page_offset(s, i)
-	isassigned(s.reverse, page) && s.reverse[page][offset] != 0
+	isassigned(s.reverse, page) && @inbounds s.reverse[page][offset] != 0
 end
 
 @inline function Base.findfirst(i, s::PackedIntSet)
 	page, offset = page_offset(s, i)
 	if isassigned(s.reverse, page)
-		id = s.reverse[page][offset]
+		@inbounds id = s.reverse[page][offset]
 		return id
 	end
 	return 0
@@ -83,7 +83,7 @@ end
 @inline function Base.pop!(s::PackedIntSet)
 	id = pop!(s.packed)
 	page, offset = page_offset(s, id)
-	s.reverse[page][offset] = 0
+	@inbounds s.reverse[page][offset] = 0
 	return id
 end
 
