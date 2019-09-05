@@ -72,10 +72,25 @@ push!(set, newid)
 @test pop!(set, tids[23]) == tids[23]
 
 
+pagelen = DataStructures.elements_per_page(Int)
+set     = PackedIntSet{Int}()
+push!(set, 1)
+push!(set, pagelen)
+@test length(set.reverse) == 1
+push!(set, pagelen + 1)
+@test length(set.reverse) == 2
+push!(set, 5*pagelen + 1)
+@test length(set.reverse) == 6
 
+mem = Base.summarysize(set)
 
-
-
+pop!(set, pagelen + 1)
+cleanup!(set)
+@test length(set.reverse) == 6
+pop!(set, 5*pagelen + 1)
+cleanup!(set)
+@test length(set.reverse) == 1
+@test Base.summarysize(set) < mem
 
 
 

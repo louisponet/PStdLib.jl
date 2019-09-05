@@ -9,6 +9,7 @@ module DataStructures
 	export GappedVector
 	export LooseVector
 	export pointer_zip
+	export cleanup!
 
 	const PAGESIZE = 0
 	function __init__()

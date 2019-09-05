@@ -1,6 +1,6 @@
 
 #TODO: Batch creation and allocation
-struct PackedIntSet{T<:Integer}
+mutable struct PackedIntSet{T<:Integer}
 	packed ::Vector{T}
 	reverse::Vector{TypedPage{T}}
 	function PackedIntSet{T}() where {T}
@@ -105,6 +105,19 @@ end
     return id
 end
 
+function cleanup!(s::PackedIntSet{T}) where {T}
+	isused = x -> isassigned(s.reverse, x) && any(y -> y != 0, s.reverse[x].data)
+	indices = eachindex(s.reverse)
+	last_page_id = findlast(isused, indices)
+	new_pages    = Vector{TypedPage{T}}(undef, last_page_id)
+	for i in indices
+		if isused(i)
+			new_pages[i] = s.reverse[i]
+		end
+	end
+	s.reverse = new_pages
+end
+	
 struct ZippedPackedIntSetIterator{T}
 	sets::T
 	shortest_set::PackedIntSet{Int}
@@ -115,7 +128,6 @@ end
 Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)::ZippedPackedIntSetIterator{typeof(s)}
 
 @inline Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
-
 
 Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=0)
 	state += 1
@@ -130,4 +142,5 @@ Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, s
 	end
 	return tids, state
 end
+
 

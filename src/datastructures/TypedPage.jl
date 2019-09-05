@@ -8,19 +8,18 @@ end
 
 Base.fill!(p::TypedPage, v) = (fill!(p.data, v); p)
 
-Base.length(::TypedPage{T}) where {T} = elements_per_page(T)
-Base.length(::Type{TypedPage{T}}) where {T} = elements_per_page(T)
+@inline Base.length(::TypedPage{T}) where {T} = elements_per_page(T)
+@inline Base.length(::Type{TypedPage{T}}) where {T} = elements_per_page(T)
 
-@inline Base.@propagate_inbounds function Base.getindex(p::TypedPage, i)
-	@boundscheck if i > length(p)
-		throw(BoundsError(p, i))
-	end
-	return p.data[i]
+@inline Base.checkbounds(p::TypedPage{T}, i::Integer) where {T} =
+	i > length(p) && throw(BoundsError(p, i))
+
+@inline Base.@propagate_inbounds function Base.getindex(p::TypedPage, i::Integer)
+	@boundscheck checkbounds(p, i)
+	return @inbounds p.data[i]
 end
 
-@inline Base.@propagate_inbounds function Base.setindex!(p::TypedPage, v, i)
-	@boundscheck if i > length(p)
-		throw(BoundsError(p, i))
-	end
-	return p.data[i] = v
+@inline Base.@propagate_inbounds function Base.setindex!(p::TypedPage, v, i::Integer)
+	@boundscheck checkbounds(p, i)
+	return @inbounds p.data[i] = v
 end
