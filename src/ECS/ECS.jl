@@ -44,7 +44,11 @@ module ECS
 	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
 
 	Base.eltype(::AbstractComponent{T}) where T = T
-	Base.eltype(::Type{AbstractComponent{T}}) where T = T
+
+	@generated function Base.getindex(t::C, ::Type{T}) where {C<:Tuple,T<:ComponentData}
+		id = findfirst(x -> eltype(x)==T, C.parameters)
+		return :(t[$id])
+	end
 
 	@inline component_data(c::AbstractComponent) = c.data
 	@inline component_data(c::Enumerate{<:AbstractComponent}) = component_data(c.itr)
@@ -88,6 +92,7 @@ module ECS
 			return c
 		end
 	end
+	Base.eltype(::Type{Component{T}}) where T = T
 
 	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Entity) = component_data(c)[id(e)]
 	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = component_data(c).data[e]
@@ -136,6 +141,8 @@ module ECS
 		end
 	end
 
+	Base.eltype(::Type{SharedComponent{T}}) where T = T
+
 	@inline shared_data(c::SharedComponent) = c.shared
 
 	@inline Base.@propagate_inbounds Base.getindex(c::SharedComponent, e::Int) =
@@ -180,47 +187,7 @@ module ECS
 
 	abstract type System end
 
-	data(s::System) =
-		s.data
-
-	isengaged(s::System) = data(s).engaged
-	engage!(s::System)   = data(s).engaged = true
-	disengage!(s::System)= data(s).engaged = false
-
-	requested_components(s::System) = data(s).requested_components
-
-	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} = 
-		data(s)[T]
-
-	function register!(s::System, c::AbstractComponent{T}) where {T}
-		req_comps = requested_components(s)
-		id = findfirst(x -> x<:T, req_comps)
-		if id !== nothing
-			pop!(req_comps, id)
-		end
-		new_comps = (data(s).components..., c)
-		engaged = isempty(req_comps) ? true : false
-		s.data = SystemData(engaged, new_comps, req_comps)
-	end
-
-
-	#Each system should have this as it's data field, or data() needs to be
-	#overloaded
-	#TODO: Speedup: maybe using Tuples of components might be better,
-	#               since technically one should know what components to use.
-	struct SystemData{T<:Tuple}
-		engaged::Bool 
-		#These are the components that the system will work with
-	components::T
-		requested_components::Vector{Type{ComponentData}}
-	end
-
-	@generated function Base.getindex(s::SystemData{CT}, ::Type{T}) where {CT,T<:ComponentData}
-		id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
-		quote
-			return s.components[$id]
-		end
-	end
+	requested_components(::Type{System}) = ()
 
 	struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
@@ -252,22 +219,6 @@ module ECS
 	end
 
 	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
-
-	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
-		comps = AbstractComponent[]
-		requested_components = Type{ComponentData}[]
-		for ct in component_types
-			if ct ∈ keys(components(manager))
-				push!(comps, manager[ct])
-			else
-				push!(requested_components, ct)
-			end
-		end
-		ct = (comps...,)
-		engaged = isempty(requested_components) && engaged
-		return SystemData{typeof(ct)}(engaged, ct, requested_components)
-	end
-
 
 	components(m::Manager)     = m.components
 	entities(m::Manager)       = m.entities
@@ -350,7 +301,15 @@ module ECS
 	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
 
 	function register!(m::Manager, c::AbstractComponent{T}) where {T}
-		map(x -> register!(x, c), systems(m))
 		components(m)[T] = c
+	end
+
+	function update_systems(m::Manager)
+		for sys in m.systems
+			req_components = requested_components(sys)
+			if all(x -> x ∈ keys(components(m)), req_components)
+				sys(map(x -> m[x], requested_components(sys))...)
+			end
+		end
 	end
 end
