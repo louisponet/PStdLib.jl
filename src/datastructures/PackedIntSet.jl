@@ -24,6 +24,10 @@ PackedIntSet() = PackedIntSet{Int}()
 	return s.reverse[page][offset]::T
 end
 
+@inline Base.@propagate_inbounds function reverse_id(s::PackedIntSet{T}, i::Integer) where {T}
+	return s.packed[i]::T
+end
+
 @inline Base.length(s::PackedIntSet) = length(s.packed)
 
 @inline function page_offset(s::PackedIntSet, i)
@@ -129,6 +133,15 @@ Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)::ZippedPackedInt
 
 @inline Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
 
+Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator{<:NTuple{1}}, state=0)
+	state += 1
+	if state > length(it)
+		return nothing
+	end
+	id = it.shortest_set.packed[state]
+	return (id, (state,)), state
+end
+
 Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=0)
 	state += 1
 	if state > length(it)
@@ -140,7 +153,7 @@ Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, s
 	if !all(x -> x!=0, tids)
 		return iterate(it, state)
 	end
-	return tids, state
+	return (id, tids), state
 end
 
 

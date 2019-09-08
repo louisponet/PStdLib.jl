@@ -1,7 +1,9 @@
 module ECS
 	using ..DataStructures
+	using Base: Enumerate
+	using InlineExports
 	import ..getfirst
-	import Base.Enumerate
+	import Base: == 
 
 	export System
 	export SystemData
@@ -9,12 +11,12 @@ module ECS
 	export Component
 	export Entity
 	export Manager
+	export manager
 
 	export update
 
 	const VECTORTYPE = LooseVector
 	abstract type AbstractManager end
-
 	struct Entity
 		id::Int
 	end
@@ -29,7 +31,7 @@ module ECS
 		end
 		n = length(entities(m)) + 1
 		e = Entity(n)
-		push!(m.entities, e)
+		push!(entities(m), e)
 		return e
 	end
 
@@ -39,11 +41,25 @@ module ECS
 
 	abstract type ComponentData end
 
+	function Entity(m::AbstractManager, datas::ComponentData...)
+		e = Entity(m)
+		for d in datas
+			m[typeof(d), e] = d
+		end
+	end
+
+	#TODO improve this
+	==(c1::T, c2::T) where {T <: ComponentData} =
+		all(getfield.((c1,), fieldnames(T)) .== getfield.((c2,), fieldnames(T)))
+
 	abstract type AbstractComponent{T<:ComponentData} end
+
+	Entity(c::AbstractComponent, i::Integer) = Entity(DataStructures.reverse_id(component_data(c).indices,i))
 
 	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
 
 	Base.eltype(::AbstractComponent{T}) where T = T
+	datatype(c::AbstractComponent) = eltype(c)
 
 	@generated function Base.getindex(t::C, ::Type{T}) where {C<:Tuple,T<:ComponentData}
 		id = findfirst(x -> eltype(x)==T, C.parameters)
@@ -53,7 +69,7 @@ module ECS
 	@inline component_data(c::AbstractComponent) = c.data
 	@inline component_data(c::Enumerate{<:AbstractComponent}) = component_data(c.itr)
 
-	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
+	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), component_data(c))
 
 	Base.zip(cs::Union{Enumerate{<:AbstractComponent},AbstractComponent}...) = DataStructures.ZippedLooseIterator(cs...)
 
@@ -106,9 +122,21 @@ module ECS
 	@inline Base.empty!(c::Component) = empty!(component_data(c))
 	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
 
-	Base.zip(cs::Component...) = zip(component_data.(cs)...)
+
+	struct ZippedComponentIterator
+		it::DataStructures.ZippedLooseIterator
+	end
+
+	function Base.iterate(i::ZippedComponentIterator, state=0)
+		n = iterate(i.it, state)
+		n === nothing && return n
+		(Entity(first(n[1])), Base.tail(n[1])...), n[2]
+	end
+
+	Base.zip(cs::Component...) = ZippedComponentIterator(zip(component_data.(cs)...))
+
 	Base.zip(cs::Union{Enumerate{<:Component}, Component}...) =
-		DataStructures.ZippedLooseIterator(map(x -> x isa Enumerate ? Enumerate(component_data(x)) : component_data(x), cs)...)
+		ZippedComponentIterator(DataStructures.ZippedLooseIterator(map(x -> x isa Enumerate ? Enumerate(component_data(x)) : component_data(x), cs)...))
 
 	DataStructures.pointer_zip(cs::Component...) =
 		pointer_zip(component_data.(cs)...)
@@ -220,13 +248,15 @@ module ECS
 
 	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
 
-	components(m::Manager)     = m.components
-	entities(m::Manager)       = m.entities
-	free_entities(m::Manager)  = m.free_entities
-	valid_entities(m::Manager) = filter(x -> x.id != 0, m.entities)
-	systems(m::Manager)        = m.systems
+	manager(m::Manager) = m
 
-	function all_components(::Type{T}, manager::Manager) where {T<:ComponentData}
+	@export components(m::AbstractManager)     = manager(m).components
+	@export entities(m::AbstractManager)       = manager(m).entities
+	@export free_entities(m::AbstractManager)  = manager(m).free_entities
+	@export valid_entities(m::AbstractManager) = filter(x -> x.id != 0, entities(m))
+	@export systems(m::AbstractManager)        = manager(m).systems
+
+	function all_components(::Type{T}, manager::AbstractManager) where {T<:ComponentData}
 		comps = AbstractComponent[]
 		for c in components(manager)
 			if eltype(c) <: T
@@ -236,16 +266,16 @@ module ECS
 		return comps
 	end
 
-	function entity_assert(m::Manager, e::Entity)
+	function entity_assert(m::AbstractManager, e::Entity)
 		es = entities(m)
 		@assert length(es) >= e.id "$e was never initiated."
 		@assert es[e] != Entity(0) "$e was removed previously."
 	end
 
-	Base.getindex(m::Manager, ::Type{T}) where {T<:ComponentData} =
+	Base.getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
 		components(m)[T]
 
-	function Base.getindex(m::Manager, e::Entity)
+	function Base.getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		
 		data = ComponentData[]
 		for c in components(m)
@@ -256,6 +286,9 @@ module ECS
 		return data
 	end
 
+	Base.getindex(m::AbstractManager, args...) = getindex(manager(m), args...)
+	Base.setindex!(m::AbstractManager, args...) = setindex!(manager(m), args...)
+
 	#TODO: Performance
 	function Base.getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
@@ -264,21 +297,45 @@ module ECS
 
 	function Base.setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
-		return m[T][id(e)] = v
+		if !haskey(m.components, T)
+			c = Component{T}(m)
+		else
+			c = m[T]
+		end
+
+		return c[e] = v
 	end
 
 	function Base.setindex!(m::Manager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
 		comp = m[T]
 		for e in es
 			entity_assert(m, e)
-			comp[id(e)] = v
+			comp[e] = v
 		end
 		return v
 	end
+	Base.push!(m::AbstractManager, sys::System) = push!(systems(m), sys)
+	Base.insert!(m::AbstractManager, i::Int, sys::System) = insert!(systems(m), i, sys)
 
-	Entity(m::Manager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
+	function Base.insert!(m::AbstractManager, ::Type{T}, sys::System, after=true) where {T<:System}
+		id = findfirst(x -> isa(x, T), systems(m))
+		if id != nothing
+			if after
+				insert!(m, id + 1, sys)
+			else
+				insert!(m, id - 1, sys)
+			end
+		end
+	end
 
-	function remove_entity!(m::Manager, e::Entity)
+	function Base.deleteat!(m::AbstractManager, ::Type{T}) where {T<:System}
+		sysids = findall(x -> isa(x, T), systems(m))
+		deleteat!(systems(m), sysids)
+	end
+
+	Entity(m::AbstractManager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
+
+	function remove_entity!(m::AbstractManager, e::Entity)
 		entity_assert(m, e)
 		push!(free_entities(m), e)
 		entities(m)[id(e)] = Entity(0)
@@ -289,27 +346,44 @@ module ECS
 		end
 	end
 
-	function Base.empty!(m::Manager)
-		empty!(m.entities)
+	function Base.empty!(m::AbstractManager)
+		empty!(entities(m))
 
 		for c in values(components(m))
 			empty!(c)
 		end
 	end
 
-	Base.getindex(d::Dict, e::Entity) = d[id(e)]
-	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
-
-	function register!(m::Manager, c::AbstractComponent{T}) where {T}
+	function register!(m::AbstractManager, c::AbstractComponent{T}) where {T}
 		components(m)[T] = c
 	end
 
-	function update_systems(m::Manager)
-		for sys in m.systems
+	function update_systems(m::AbstractManager)
+		for sys in systems(m)
 			req_components = requested_components(sys)
 			if all(x -> x ∈ keys(components(m)), req_components)
 				sys(map(x -> m[x], requested_components(sys))...)
 			end
 		end
 	end
+
+	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} = haskey(components(m), R)
+
+	function add_requested_components(m::AbstractManager, s::System)
+		for r in requested_components(s)
+			if !has_component(m, r)
+				Component{r}(m)
+			end
+		end
+	end
+	add_requested_components(m::AbstractManager) = map(x->add_requested_components(m, x), systems(m))
+
+	function prepare(m::AbstractManager)
+		for s in systems(m)
+			add_requested_components(m, s)
+			prepare(s, m)
+		end
+	end
+
+	prepare(::System, ::AbstractManager) = nothing
 end

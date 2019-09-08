@@ -19,6 +19,8 @@ LooseVector{T}() where {T} = LooseVector{T}(T[])
 
 @inline packed_id(s::LooseVector, i) = packed_id(s.indices, i)
 
+@inline reverse_id(s::LooseVector, i) = reverse_id(s.indices, i)
+
 @inline Base.length(s::LooseVector) = length(s.data)
 @inline Base.size(s::LooseVector) = (length(s),)
 
@@ -105,7 +107,7 @@ Base.zip(s::Union{Base.Enumerate{<:LooseVector}, LooseVector}...) = ZippedLooseI
 Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
-	@inbounds map((x, y) -> iterfunc(y, x)[1], n[1], it.datas), n[2]
+	@inbounds (n[1][1], map((x, y) -> iterfunc(y, x)[1], n[1][2], it.datas)...), n[2]
 end
 
 struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
@@ -118,8 +120,5 @@ pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
 Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=0)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
-	map((x, y) -> pointer(y, x), n[1], it.datas), n[2]
+	map((x, y) -> pointer(y, x), n[1][2], it.datas), n[2]
 end
-
-
-
