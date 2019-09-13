@@ -1,7 +1,13 @@
 module ECS
 	using ..DataStructures
+	import ..DataStructures: indices, data, iterfunc
+	using ..DataStructures: Direct, Reverse
+	using Base: Enumerate, @propagate_inbounds
+	import Base: getindex, setindex!, iterate, eltype, in, isempty, length,
+				 pointer, empty!, push!, insert!, deleteat!
+	using InlineExports
 	import ..getfirst
-	import Base.Enumerate
+	import Base: == 
 
 	export System
 	export SystemData
@@ -9,12 +15,12 @@ module ECS
 	export Component
 	export Entity
 	export Manager
+	export manager
 
 	export update
 
 	const VECTORTYPE = LooseVector
 	abstract type AbstractManager end
-
 	struct Entity
 		id::Int
 	end
@@ -29,57 +35,72 @@ module ECS
 		end
 		n = length(entities(m)) + 1
 		e = Entity(n)
-		push!(m.entities, e)
+		push!(entities(m), e)
 		return e
 	end
 
-	@inline Base.@propagate_inbounds Base.getindex(v::AbstractVector, e::Entity) = v[id(e)]
-	# Base.setindex!(vec::AbstractVector, v, e::Entity) = setindex!(vec, v, id(e))
+	@inline @propagate_inbounds getindex(v::AbstractVector, e::Entity) = v[id(e)]
+	# setindex!(vec::AbstractVector, v, e::Entity) = setindex!(vec, v, id(e))
 	# Base.deleteat!(vec::AbstractVector, e::Entity) = deleteat!(vec, id(e))
 
 	abstract type ComponentData end
 
-	abstract type AbstractComponent{T<:ComponentData} end
-
-	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
-
-	Base.eltype(::AbstractComponent{T}) where T = T
-	Base.eltype(::Type{AbstractComponent{T}}) where T = T
-
-	@inline component_data(c::AbstractComponent) = c.data
-	@inline component_data(c::Enumerate{<:AbstractComponent}) = component_data(c.itr)
-
-	@inline Base.in(c::AbstractComponent, e::Entity) = in(id(e), data(c))
-
-	Base.zip(cs::Union{Enumerate{<:AbstractComponent},AbstractComponent}...) = DataStructures.ZippedLooseIterator(cs...)
-
-	Base.isempty(c::AbstractComponent) = isempty(component_data(c))
-
-	Base.length(c::AbstractComponent) = length(component_data(c))
-
-	@inline DataStructures.iterfunc(c::AbstractComponent, i::Integer) = iterate(c, i)
-	@inline DataStructures.iterfunc(c::Enumerate{<:AbstractComponent}, i::Integer) = iterate(c, (i,i))
-
-	function (::Type{T})(comps::Union{AbstractComponent, Enumerate{<:AbstractComponent}}...) where {T<:DataStructures.AbstractZippedLooseIterator}
-		iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> component_data(x).indices, comps)...)
-		T(comps, iterator)
+	function Entity(m::AbstractManager, datas::ComponentData...)
+		e = Entity(m)
+		for d in datas
+			m[typeof(d), e] = d
+		end
 	end
 
+	#TODO improve this
+	==(c1::T, c2::T) where {T <: ComponentData} =
+		all(getfield.((c1,), fieldnames(T)) .== getfield.((c2,), fieldnames(T)))
+
+	abstract type AbstractComponent{T<:ComponentData} end
+
+	Entity(c::AbstractComponent, i::Integer) = Entity(DataStructures.reverse_id(storage(c).indices,i))
+
+	#TODO use heterogenous storage maybe
+	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
+
+	eltype(::AbstractComponent{T}) where T = T
+	datatype(c::AbstractComponent) = eltype(c)
+
+	@generated function getindex(t::C, ::Type{T}) where {C<:Tuple,T<:ComponentData}
+		id = findfirst(x -> eltype(x)==T, C.parameters)
+		return :(t[$id])
+	end
+
+	const EnumUnion{T} = Union{T, Enumerate{<:T}}
+
+	@inline storage(c::AbstractComponent) = c.storage
+	@inline storage(c::Enumerate{<:AbstractComponent}) = storage(c.itr)
+
+	@inline indices(c::EnumUnion{AbstractComponent}) = indices(storage(c))
+	@inline data(c::AbstractComponent)    = data(storage(c))
+	@inline data(c::Enumerate{<:AbstractComponent})    = enumerate(data(storage(c)))
+
+	@inline in(c::AbstractComponent, e::Entity) = in(id(e), storage(c))
+
+
+	isempty(c::AbstractComponent) = isempty(storage(c))
+
+	length(c::AbstractComponent) = length(storage(c))
 
 	"""
 	The most basic component type.
 	Holds a `PackedIntSet` that represents whether an entity has the component, and a data vector that
-	has the component_datas contiguously stored in memory in the same order as the entities indices inside
+	has the storages contiguously stored in memory in the same order as the entities indices inside
 	the `PackedIntSet` (e.g. without any sorting or popping, the order in which the component was added
 	to the entities).
 
-	Indexing into a component with an `Entity` will return the component_data linked to that entity,
+	Indexing into a component with an `Entity` will return the storage linked to that entity,
 	indexing with a regular Int will return directly the `ComponentData` that is stored in the data
-	vector at that index, i.e. generally not the component_data linked to the `Entity` with that `Int` as id.
+	vector at that index, i.e. generally not the storage linked to the `Entity` with that `Int` as id.
 	"""
 	struct Component{T} <: AbstractComponent{T}
 		id  ::Int
-		data::VECTORTYPE{T}
+		storage::VECTORTYPE{T}
 		function Component{T}(m::AbstractManager) where {T<:ComponentData}
 			n = length(components(m)) + 1
 			v = VECTORTYPE{T}()
@@ -88,44 +109,40 @@ module ECS
 			return c
 		end
 	end
+	eltype(::Type{Component{T}}) where T = T
 
-	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Entity) = component_data(c)[id(e)]
-	@inline Base.@propagate_inbounds Base.getindex(c::Component, e::Int)    = component_data(c).data[e]
+	@inline @propagate_inbounds getindex(c::Component, e::Entity) = storage(c)[id(e), Reverse()]
+	@inline @propagate_inbounds getindex(c::Component, e::Int)    = storage(c)[e, Direct()]
 
-	@inline Base.@propagate_inbounds Base.pointer(c::Component, e::Entity) = pointer(component_data(c), id(e))
-	@inline Base.pointer(c::Component, e::Int) = DataStructures.packed_pointer(c.data, e)
+	@inline @propagate_inbounds pointer(c::Component, e::Entity) = pointer(storage(c), id(e), Reverse())
+	@inline pointer(c::Component, e::Int) = pointer(storage(c), e, Direct())
 
-	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Entity) = component_data(c)[id(e)] = v
-	@inline Base.@propagate_inbounds Base.setindex!(c::Component, v, e::Int) = component_data(c).data[e] = v
+	@inline @propagate_inbounds setindex!(c::Component, v, e::Entity) = storage(c)[id(e), Reverse()] = v
+	@inline @propagate_inbounds setindex!(c::Component, v, e::Int) = storage(c)[e, Direct()] = v
 
-	@inline Base.empty!(c::Component) = empty!(component_data(c))
-	Base.iterate(c::Component, args...) = iterate(component_data(c), args...)
-
-	Base.zip(cs::Component...) = zip(component_data.(cs)...)
-	Base.zip(cs::Union{Enumerate{<:Component}, Component}...) =
-		DataStructures.ZippedLooseIterator(map(x -> x isa Enumerate ? Enumerate(component_data(x)) : component_data(x), cs)...)
+	@inline empty!(c::Component) = empty!(storage(c))
 
 	DataStructures.pointer_zip(cs::Component...) =
-		pointer_zip(component_data.(cs)...)
+		pointer_zip(storage.(cs)...)
 
 	DataStructures.pointer_zip(cs::AbstractComponent...) =
 		DataStructures.PointerZippedLooseIterator(cs...)
 
 	#maybe this shouldn't be called remove_entity!
 	remove_entity!(c::AbstractComponent, e::Entity) =
-		pop!(component_data(c), id(e))
+		pop!(storage(c), id(e))
 
 
 	"""
 	Similar to a normal `Component` however the data that is locked to the underlying `PackedIntSet`
-	is now the indices into the vector with shared component_data.
+	is now the indices into the vector with shared storage.
 
 	Indexing is similar to the normal `Component` however indexing with an `Int` now returns the shared data
 	at that index.
 	"""
 	struct SharedComponent{T<:ComponentData} <: AbstractComponent{T}
 		id    ::Int
-		data  ::VECTORTYPE{Int} #These are basically the ids
+		storage::VECTORTYPE{Int} #These are basically the ids
 		shared::Vector{T}
 		function SharedComponent{T}(m::AbstractManager) where {T<:ComponentData}
 			n = length(components(m)) + 1
@@ -136,91 +153,42 @@ module ECS
 		end
 	end
 
+	eltype(::Type{SharedComponent{T}}) where T = T
+
 	@inline shared_data(c::SharedComponent) = c.shared
 
-	@inline Base.@propagate_inbounds Base.getindex(c::SharedComponent, e::Int) =
-		shared_data(c)[component_data(c).data[e]]
+	@inline @propagate_inbounds getindex(c::SharedComponent, e::Int) =
+		shared_data(c)[storage(c)[e, Direct()]]
 
-	@inline Base.@propagate_inbounds function Base.getindex(c::SharedComponent, e::Entity)
-		index = component_data(c)[id(e)]
+	@inline @propagate_inbounds function getindex(c::SharedComponent, e::Entity)
+		index = storage(c)[id(e), Reverse()]
 		return shared_data(c)[index]
 	end
 
-	@inline Base.@propagate_inbounds Base.pointer(c::SharedComponent, e::Entity) =
-			pointer(shared_data(c), component_data(c)[id(e)])
+	@inline @propagate_inbounds pointer(c::SharedComponent, e::Entity) =
+			pointer(shared_data(c), storage(c)[id(e)])
 
-	@inline Base.pointer(c::SharedComponent, e::Int) = pointer(shared_data(c), component_data(c).data[e])
+	@inline pointer(c::SharedComponent, e::Int) = pointer(shared_data(c), storage(c)[e, Direct()])
 
-	@inline Base.@propagate_inbounds function Base.setindex!(c::SharedComponent, v, e::Entity)
+	@inline @propagate_inbounds function setindex!(c::SharedComponent, v, e::Entity)
 		sd = shared_data(c)
 		datid = findfirst(x -> x === v, sd)
 		if datid === nothing
 			push!(sd, v)
-			component_data(c)[id(e)] = length(sd)
+			storage(c)[id(e)] = length(sd)
 		else
-			component_data(c)[id(e)] = datid
+			storage(c)[id(e)] = datid
 		end
 	end
 
-	@inline Base.@propagate_inbounds Base.setindex!(c::SharedComponent, v, e::Int) =
-		shared_data(c)[component_data(c).data[e]] = v
+	@inline @propagate_inbounds setindex!(c::SharedComponent, v, e::Int) =
+		shared_data(c)[storage(c).data[e]] = v
 
-	@inline Base.empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
-
-	function Base.iterate(c::SharedComponent, state=1)
-		state > length(c) && return nothing
-		return c[state], state+1
-	end
-
-	function Base.iterate(e::Enumerate{<:SharedComponent}, state=(1,))
-		n = iterate(component_data(e.itr), state[1])
-		n === nothing && return n
-		return (state[1], shared_data(e.itr)[n[1]]), Base.tail(n)
-	end
+	@inline empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
 
 	abstract type System end
 
-	data(s::System) =
-		s.data
-
-	isengaged(s::System) = data(s).engaged
-	engage!(s::System)   = data(s).engaged = true
-	disengage!(s::System)= data(s).engaged = false
-
-	requested_components(s::System) = data(s).requested_components
-
-	Base.getindex(s::System, ::Type{T}) where {T<:ComponentData} = 
-		data(s)[T]
-
-	function register!(s::System, c::AbstractComponent{T}) where {T}
-		req_comps = requested_components(s)
-		id = findfirst(x -> x<:T, req_comps)
-		if id !== nothing
-			pop!(req_comps, id)
-		end
-		new_comps = (data(s).components..., c)
-		engaged = isempty(req_comps) ? true : false
-		s.data = SystemData(engaged, new_comps, req_comps)
-	end
-
-
-	#Each system should have this as it's data field, or data() needs to be
-	#overloaded
-	#TODO: Speedup: maybe using Tuples of components might be better,
-	#               since technically one should know what components to use.
-	struct SystemData{T<:Tuple}
-		engaged::Bool 
-		#These are the components that the system will work with
-	components::T
-		requested_components::Vector{Type{ComponentData}}
-	end
-
-	@generated function Base.getindex(s::SystemData{CT}, ::Type{T}) where {CT,T<:ComponentData}
-		id = findfirst(x-> x<:AbstractComponent{T}, CT.parameters)
-		quote
-			return s.components[$id]
-		end
-	end
+	requested_components(::Type{System}) = ()
 
 	struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
@@ -253,29 +221,15 @@ module ECS
 
 	Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> getindex(s, x), T)...)
 
-	function SystemData(component_types::NTuple, manager::Manager, engaged=true)
-		comps = AbstractComponent[]
-		requested_components = Type{ComponentData}[]
-		for ct in component_types
-			if ct ∈ keys(components(manager))
-				push!(comps, manager[ct])
-			else
-				push!(requested_components, ct)
-			end
-		end
-		ct = (comps...,)
-		engaged = isempty(requested_components) && engaged
-		return SystemData{typeof(ct)}(engaged, ct, requested_components)
-	end
+	manager(m::Manager) = m
 
+	@export components(m::AbstractManager)     = manager(m).components
+	@export entities(m::AbstractManager)       = manager(m).entities
+	@export free_entities(m::AbstractManager)  = manager(m).free_entities
+	@export valid_entities(m::AbstractManager) = filter(x -> x.id != 0, entities(m))
+	@export systems(m::AbstractManager)        = manager(m).systems
 
-	components(m::Manager)     = m.components
-	entities(m::Manager)       = m.entities
-	free_entities(m::Manager)  = m.free_entities
-	valid_entities(m::Manager) = filter(x -> x.id != 0, m.entities)
-	systems(m::Manager)        = m.systems
-
-	function all_components(::Type{T}, manager::Manager) where {T<:ComponentData}
+	function all_components(::Type{T}, manager::AbstractManager) where {T<:ComponentData}
 		comps = AbstractComponent[]
 		for c in components(manager)
 			if eltype(c) <: T
@@ -285,16 +239,16 @@ module ECS
 		return comps
 	end
 
-	function entity_assert(m::Manager, e::Entity)
+	function entity_assert(m::AbstractManager, e::Entity)
 		es = entities(m)
 		@assert length(es) >= e.id "$e was never initiated."
 		@assert es[e] != Entity(0) "$e was removed previously."
 	end
 
-	Base.getindex(m::Manager, ::Type{T}) where {T<:ComponentData} =
+	getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
 		components(m)[T]
 
-	function Base.getindex(m::Manager, e::Entity)
+	function getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		
 		data = ComponentData[]
 		for c in components(m)
@@ -305,29 +259,56 @@ module ECS
 		return data
 	end
 
+	getindex(m::AbstractManager, args...) = getindex(manager(m), args...)
+	setindex!(m::AbstractManager, args...) = setindex!(manager(m), args...)
+
 	#TODO: Performance
-	function Base.getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
+	function getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
 		return m[T][id(e)]
 	end
 
-	function Base.setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
+	function setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
-		return m[T][id(e)] = v
+		if !haskey(m.components, T)
+			c = Component{T}(m)
+		else
+			c = m[T]
+		end
+
+		return c[e] = v
 	end
 
-	function Base.setindex!(m::Manager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
+	function setindex!(m::Manager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
 		comp = m[T]
 		for e in es
 			entity_assert(m, e)
-			comp[id(e)] = v
+			comp[e] = v
 		end
 		return v
 	end
+	push!(m::AbstractManager, sys::System) = push!(systems(m), sys)
+	insert!(m::AbstractManager, i::Int, sys::System) = insert!(systems(m), i, sys)
 
-	Entity(m::Manager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
+	function insert!(m::AbstractManager, ::Type{T}, sys::System, after=true) where {T<:System}
+		id = findfirst(x -> isa(x, T), systems(m))
+		if id != nothing
+			if after
+				insert!(m, id + 1, sys)
+			else
+				insert!(m, id - 1, sys)
+			end
+		end
+	end
 
-	function remove_entity!(m::Manager, e::Entity)
+	function Base.deleteat!(m::AbstractManager, ::Type{T}) where {T<:System}
+		sysids = findall(x -> isa(x, T), systems(m))
+		deleteat!(systems(m), sysids)
+	end
+
+	Entity(m::AbstractManager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
+
+	function remove_entity!(m::AbstractManager, e::Entity)
 		entity_assert(m, e)
 		push!(free_entities(m), e)
 		entities(m)[id(e)] = Entity(0)
@@ -338,19 +319,45 @@ module ECS
 		end
 	end
 
-	function Base.empty!(m::Manager)
-		empty!(m.entities)
+	function empty!(m::AbstractManager)
+		empty!(entities(m))
 
 		for c in values(components(m))
 			empty!(c)
 		end
 	end
 
-	Base.getindex(d::Dict, e::Entity) = d[id(e)]
-	Base.setindex!(d::Dict, v, e::Entity) = d[id(e)] = v
-
-	function register!(m::Manager, c::AbstractComponent{T}) where {T}
-		map(x -> register!(x, c), systems(m))
+	function register!(m::AbstractManager, c::AbstractComponent{T}) where {T}
 		components(m)[T] = c
 	end
+
+	function update_systems(m::AbstractManager)
+		for sys in systems(m)
+			req_components = requested_components(sys)
+			if all(x -> x ∈ keys(components(m)), req_components)
+				sys(map(x -> m[x], requested_components(sys))...)
+			end
+		end
+	end
+
+	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} = haskey(components(m), R)
+
+	function add_requested_components(m::AbstractManager, s::System)
+		for r in requested_components(s)
+			if !has_component(m, r)
+				Component{r}(m)
+			end
+		end
+	end
+	add_requested_components(m::AbstractManager) = map(x->add_requested_components(m, x), systems(m))
+
+	function prepare(m::AbstractManager)
+		for s in systems(m)
+			add_requested_components(m, s)
+			prepare(s, m)
+		end
+	end
+
+	prepare(::System, ::AbstractManager) = nothing
+	include("iteration.jl")
 end

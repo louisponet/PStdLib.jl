@@ -1,7 +1,7 @@
 #%%
 using PStdLib: ECS
 using PStdLib: DataStructures
-import PStdLib.ECS: Manager, ComponentData, Component, Entity, System, SystemData
+import PStdLib.ECS: Manager, ComponentData, Component, Entity, System
 using PStdLib.DataStructures
 using PStdLib.Geometry
 using PStdLib
@@ -15,17 +15,13 @@ struct Spatial <: ComponentData
 	p::Vec3{Float64}
 	v::Vec3{Float64}
 end
-struct Oscillator <: System
-	data ::SystemData
-end
-function Oscillator(m::Manager)
-	O = Oscillator(SystemData((Spatial, Spring), m))
-	push!(m.systems, O)
-	return O
-end
-function update(sys::Oscillator)
-	spat, spring = sys[Spatial], sys[Spring]
-	@inbounds for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
+struct Oscillator <: System end
+
+ECS.requested_components(::Oscillator) = (Spatial, Spring)
+
+function (::Oscillator)(spat, spring)
+	it = zip(enumerate(spat), spring)
+	@inbounds for ((id1, e_spat), spr) in it
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * 1.0
@@ -33,16 +29,14 @@ function update(sys::Oscillator)
 	end
 end
 
-function pointer_update(sys::Oscillator)
-	map(sys, Spatial, Spring) do spat, spring
-		@inbounds for (p_spat, p_spr) in pointer_zip(spat, spring)
-			e_spat = unsafe_load(p_spat)
-			spr = unsafe_load(p_spr)
-			v_prev   = e_spat.v
-			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
-			new_p    = e_spat.p + v_prev * 1.0
-			unsafe_store!(p_spat, Spatial(new_p, new_v))
-		end
+function (::Oscillator)(spat, spring, ::Val{:pointer})
+	@inbounds for (p_spat, p_spr) in pointer_zip(spat, spring)
+		e_spat = unsafe_load(p_spat)
+		spr = unsafe_load(p_spr)
+		v_prev   = e_spat.v
+		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
+		new_p    = e_spat.p + v_prev * 1.0
+		unsafe_store!(p_spat, Spatial(new_p, new_v))
 	end
 end
 
@@ -60,13 +54,14 @@ function create_fill(m)
 	end
 end
 create_fill(m)
-O = Oscillator(m)
+O = Oscillator()
 
+push!(m.systems, O)
 for i = 1:3
-	update(O)
+	ECS.update_systems(m)
 end
 for i = 1:2
-	pointer_update(O)
+	O(m[Spatial], m[Spring], Val{:pointer}())
 end
 
 
@@ -74,11 +69,13 @@ end
 
 m = Manager((Spatial,), (Spring,))
 create_fill(m)
-O = Oscillator(m)
+O = Oscillator()
+
+push!(m.systems, O)
 for i = 1:3
-	update(O)
+	ECS.update_systems(m)
 end
 for i = 1:2
-	pointer_update(O)
+	O(m[Spatial], m[Spring], Val{:pointer}())
 end
 @test sum(map(x->m[Spatial, Entity(x)].p[1], 1:100)) == -5605.33

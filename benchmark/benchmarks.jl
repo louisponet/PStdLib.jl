@@ -75,26 +75,19 @@ using PStdLib.ECS
 using PStdLib.Parameters
 using PStdLib.Geometry
 
+
 @with_kw struct Spring <: ComponentData
 	center::Point3{Float64} = zero(Point3{Float64})
 	k     ::Float64  = 0.01
 	damping::Float64 = 0.000
 end
-
 struct Spatial <: ComponentData
 	p::Vec3{Float64}
 	v::Vec3{Float64}
 end
+struct Oscillator <: System end
 
-struct Oscillator{S<:SystemData} <: System
-	data::S
-end
-
-function Oscillator(m::Manager)
-	O = Oscillator(SystemData((Spatial, Spring), m))
-	push!(m.systems, O)
-	return O
-end
+ECS.requested_components(::Oscillator) = (Spatial, Spring)
 
 function ecs_creation()
 	m = Manager(Spatial, Spring)
@@ -115,19 +108,7 @@ function create_fill_ecs(m)
 	end
 end
 
-function update_map(sys::Oscillator)
-	map(sys, Spatial, Spring) do spat, spring
-		for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
-			v_prev   = e_spat.v
-			new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
-			new_p    = e_spat.p + v_prev * 1.0
-			@inbounds spat[id1] = Spatial(new_p, new_v)
-		end
-	end
-end
-
-function update(sys::Oscillator)
-	spat, spring = sys[Spatial], sys[Spring]
+function (::Oscillator)(spat, spring)
 	for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
@@ -136,8 +117,7 @@ function update(sys::Oscillator)
 	end
 end
 
-function update_pointer(sys::Oscillator)
-	spat, spring   = sys[Spatial], sys[Spring]
+function (::Oscillator)(spat, spring, ::Val{:pointer})
 	@inbounds for (p_spat, p_spr) in pointer_zip(spat, spring)
 		e_spat = unsafe_load(p_spat)
 		spr = unsafe_load(p_spr)
@@ -157,21 +137,17 @@ SUITE["ECS"]["fill entities"] =
 	# @benchmarkable create_fill(m) setup=(m=Manager(Spatial, Spring);create_fill(m)) evals=10000 samples=1
 
 SUITE["ECS"]["update oscillator"] =
-	@benchmarkable update(o) setup=(m=Manager(Spatial, Spring); o=Oscillator(m); create_fill_ecs(m))
+	@benchmarkable o(m[Spatial], m[Spring]) setup=(m=Manager(Spatial, Spring); o=Oscillator(); push!(m.systems, o); create_fill_ecs(m))
 
-SUITE["ECS"]["update oscillator mapped"] =
-	@benchmarkable update_map(o) setup=(m=Manager(Spatial, Spring); o=Oscillator(m); create_fill_ecs(m))
 
 SUITE["ECS"]["update oscillator pointers"] =
-	@benchmarkable update_pointer(o) setup=(m=Manager(Spatial, Spring); o=Oscillator(m); create_fill_ecs(m))
+	@benchmarkable o(m[Spatial], m[Spring], Val{:pointer}()) setup=(m=Manager(Spatial, Spring); o=Oscillator(); push!(m.systems, o); create_fill_ecs(m))
 
 SUITE["ECS"]["update oscillator; shared Spring"] =
-	@benchmarkable update(o) setup=(m=Manager((Spatial,), (Spring,)); o=Oscillator(m); create_fill_ecs(m))
+	@benchmarkable o(m[Spatial], m[Spring]) setup=(m=Manager((Spatial,), (Spring,)); o=Oscillator(); push!(m.systems, o); create_fill_ecs(m))
 
-SUITE["ECS"]["update oscillator mapped; shared Spring"] =
-	@benchmarkable update_map(o) setup=(m=Manager((Spatial,), (Spring,)); o=Oscillator(m); create_fill_ecs(m))
 SUITE["ECS"]["update oscillator pointers; shared Spring"] =
-	@benchmarkable update_pointer(o) setup=(m=Manager((Spatial,), (Spring,)); o=Oscillator(m); create_fill_ecs(m))
+	@benchmarkable o(m[Spatial], m[Spring], Val{:pointer}()) setup=(m=Manager((Spatial,), (Spring,)); o=Oscillator(); push!(m.systems, o); create_fill_ecs(m))
 
 
 
