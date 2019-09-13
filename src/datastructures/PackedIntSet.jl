@@ -19,6 +19,8 @@ end
 PackedIntSet(indices::AbstractVector{T}) where {T} = PackedIntSet{T}(indices)
 PackedIntSet() = PackedIntSet{Int}()
 
+Base.eltype(::PackedIntSet{T}) where {T} = T
+
 @inline Base.@propagate_inbounds function packed_id(s::PackedIntSet{T}, i) where {T}
 	page, offset = page_offset(s, i)
 	return s.reverse[page][offset]::T
@@ -121,26 +123,22 @@ function cleanup!(s::PackedIntSet{T}) where {T}
 	end
 	s.reverse = new_pages
 end
-	
-struct ZippedPackedIntSetIterator{T}
-	sets::T
-	shortest_set::PackedIntSet{Int}
-	ZippedPackedIntSetIterator(sets::PackedIntSet...) =
-		new{typeof(sets)}(sets, sets[findmin(map(x->length(x), sets))[2]])
+
+
+mutable struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
+	current_id::I
+	valid_sets::VT
+	shortest_set::PackedIntSet{I}
+	excluded_sets::IT
+	function ZippedPackedIntSetIterator(valid_sets::PackedIntSet...;excluded::NTuple{N, PackedIntSet}=()) where{N}
+		shortest = valid_sets[findmin(map(x->length(x), valid_sets))[2]]
+		new{eltype(shortest), typeof(valid_sets), typeof(excluded)}(zero(eltype(shortest)), valid_sets, shortest, excluded)
+	end
 end
 
-Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)::ZippedPackedIntSetIterator{typeof(s)}
+Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)
 
 @inline Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
-
-Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator{<:NTuple{1}}, state=0)
-	state += 1
-	if state > length(it)
-		return nothing
-	end
-	id = it.shortest_set.packed[state]
-	return (id, (state,)), state
-end
 
 Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=0)
 	state += 1
@@ -149,11 +147,13 @@ Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, s
 	end
 
 	id = it.shortest_set.packed[state]
-	tids = map(x -> findfirst(id, x), it.sets)
-	if !all(x -> x!=0, tids)
+	tids = map(x -> findfirst(id, x), it.valid_sets)
+	if all(x -> x!=0, tids) && all(x->x==0, map(x->findfirst(id, x), it.excluded_sets))
+		it.current_id = id
+		return tids, state
+	else
 		return iterate(it, state)
 	end
-	return (id, tids), state
 end
 
-
+current_id(x::ZippedPackedIntSetIterator) = x.current_id

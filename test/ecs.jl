@@ -20,7 +20,8 @@ struct Oscillator <: System end
 ECS.requested_components(::Oscillator) = (Spatial, Spring)
 
 function (::Oscillator)(spat, spring)
-	@inbounds for (eid, (id1, e_spat), spr) in zip(enumerate(spat), spring)
+	it = zip(enumerate(spat), spring)
+	@inbounds for ((id1, e_spat), spr) in it
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * 1.0
