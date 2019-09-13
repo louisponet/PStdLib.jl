@@ -130,9 +130,9 @@ mutable struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
 	valid_sets::VT
 	shortest_set::PackedIntSet{I}
 	excluded_sets::IT
-	function ZippedPackedIntSetIterator(valid_sets::PackedIntSet...;excluded::NTuple{N, PackedIntSet}=()) where{N}
+	function ZippedPackedIntSetIterator(valid_sets::PackedIntSet...;exclude::NTuple{N, PackedIntSet}=()) where{N}
 		shortest = valid_sets[findmin(map(x->length(x), valid_sets))[2]]
-		new{eltype(shortest), typeof(valid_sets), typeof(excluded)}(zero(eltype(shortest)), valid_sets, shortest, excluded)
+		new{eltype(shortest), typeof(valid_sets), typeof(exclude)}(zero(eltype(shortest)), valid_sets, shortest, exclude)
 	end
 end
 

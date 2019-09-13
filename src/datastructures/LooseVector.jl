@@ -100,9 +100,9 @@ Base.mapreduce(f, op, A::LooseVector; kwargs...) =
 
 abstract type AbstractZippedLooseIterator end
 
-function (::Type{T})(vecs::Union{LooseVector, Enumerate{<:LooseVector}}...; invalid = ()) where {T<:AbstractZippedLooseIterator}
+function (::Type{T})(vecs::Union{LooseVector, Enumerate{<:LooseVector}}...; exclude = ()) where {T<:AbstractZippedLooseIterator}
 	datas = map(x->data(x), vecs)
-	iterator = ZippedPackedIntSetIterator(map(x -> indices(x), vecs)...;invalid=map(x->indices(x), invalid))
+	iterator = ZippedPackedIntSetIterator(map(x -> indices(x), vecs)...;exclude=map(x->indices(x), exclude))
 	T(datas, iterator)
 end
 

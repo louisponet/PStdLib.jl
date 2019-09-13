@@ -109,7 +109,7 @@ function create_fill_ecs(m)
 end
 
 function (::Oscillator)(spat, spring)
-	for (e, (id1, e_spat), spr) in zip(enumerate(spat), spring)
+	for ((id1, e_spat), spr) in zip(enumerate(spat), spring)
 		v_prev   = e_spat.v
 		new_v    = v_prev - (e_spat.p - spr.center) * spr.k - v_prev * spr.damping
 		new_p    = e_spat.p + v_prev * 1.0
