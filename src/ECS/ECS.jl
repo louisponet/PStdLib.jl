@@ -99,16 +99,10 @@ module ECS
 	vector at that index, i.e. generally not the storage linked to the `Entity` with that `Int` as id.
 	"""
 	struct Component{T} <: AbstractComponent{T}
-		id  ::Int
 		storage::VECTORTYPE{T}
-		function Component{T}(m::AbstractManager) where {T<:ComponentData}
-			n = length(components(m)) + 1
-			v = VECTORTYPE{T}()
-			c = new{T}(n, v)
-			register!(m, c)
-			return c
-		end
 	end
+	Component{T}() where {T<:ComponentData} = Component{T}(VECTORTYPE{T}())
+
 	eltype(::Type{Component{T}}) where T = T
 
 	@inline @propagate_inbounds getindex(c::Component, e::Entity) = storage(c)[id(e), Reverse()]
@@ -132,6 +126,8 @@ module ECS
 	remove_entity!(c::AbstractComponent, e::Entity) =
 		pop!(storage(c), id(e))
 
+	preferred_component_type(::Type{<:ComponentData}) = Component
+
 
 	"""
 	Similar to a normal `Component` however the data that is locked to the underlying `PackedIntSet`
@@ -141,17 +137,10 @@ module ECS
 	at that index.
 	"""
 	struct SharedComponent{T<:ComponentData} <: AbstractComponent{T}
-		id    ::Int
 		storage::VECTORTYPE{Int} #These are basically the ids
 		shared::Vector{T}
-		function SharedComponent{T}(m::AbstractManager) where {T<:ComponentData}
-			n = length(components(m)) + 1
-			v = VECTORTYPE{Int}()
-			c = new{T}(n, v, T[])
-			register!(m, c)
-			return c
-		end
 	end
+	SharedComponent{T}() where {T<:ComponentData} = SharedComponent{T}(VECTORTYPE{Int}(), T[])
 
 	eltype(::Type{SharedComponent{T}}) where T = T
 
@@ -188,33 +177,40 @@ module ECS
 
 	abstract type System end
 
-	requested_components(::Type{System}) = ()
+	requested_components(::System) = ()
 
-	struct Manager <: AbstractManager
+	mutable struct Manager{C} <: AbstractManager
 		entities     ::Vector{Entity}
 		free_entities::Vector{Entity}
-		components   ::ComponentDict
+		components   ::C
 		systems      ::Vector{System}
 	end
-	Manager() = Manager(Entity[], Entity[], ComponentDict(), System[])
+	Manager() = Manager(Entity[], Entity[], (), System[])
 
-	function Manager(components::Type{<:ComponentData}...)
-		m = Manager()
-		comps = ComponentDict()
-		for c in components
-			comps[c] = Component{c}(m)
-		end
-		return m
-	end
+	Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], cs, System[])
+	Manager(components::Type{<:ComponentData}...) = Manager(map(x->preferred_component_type(x){x}(), components)...)
 
 	function Manager(components::T, shared_components::T) where {T<:Union{NTuple{N,DataType} where N,AbstractVector{DataType}}}
-		m = Manager()
-		comps = ComponentDict()
+		comps = AbstractComponent[]
 		for c in components
-			comps[c] = Component{c}(m)
+			push!(comps, Component{c}())
 		end
 		for c in shared_components
-			comps[c] = SharedComponent{c}(m)
+			push!(comps, SharedComponent{c}())
+		end
+		return Manager(comps...)
+	end
+
+	function Manager(systems::System...)
+		comps = Type{<:ComponentData}[] 
+		for s in systems
+			for c in requested_components(s)
+				push!(comps, c)
+			end
+		end
+		m = Manager(comps...)
+		for s in systems
+			push!(m.systems, s)
 		end
 		return m
 	end
@@ -270,8 +266,8 @@ module ECS
 
 	function setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
-		if !haskey(m.components, T)
-			c = Component{T}(m)
+		if !has_component(m, T)
+			c = preferred_component_type(T){T}(m)
 		else
 			c = m[T]
 		end
@@ -333,14 +329,12 @@ module ECS
 
 	function update_systems(m::AbstractManager)
 		for sys in systems(m)
-			req_components = requested_components(sys)
-			if all(x -> x ∈ keys(components(m)), req_components)
-				sys(map(x -> m[x], requested_components(sys))...)
-			end
+			sys(m)
 		end
 	end
 
-	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} = haskey(components(m), R)
+	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} =
+		any(x->eltype(x) == R, components(m))
 
 	function add_requested_components(m::AbstractManager, s::System)
 		for r in requested_components(s)
