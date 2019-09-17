@@ -16,6 +16,7 @@ module ECS
 	export Entity
 	export Manager
 	export manager
+	export insert_system, push_system
 
 	export update
 
@@ -102,6 +103,7 @@ module ECS
 		storage::VECTORTYPE{T}
 	end
 	Component{T}() where {T<:ComponentData} = Component{T}(VECTORTYPE{T}())
+	Component(::Type{T}) where {T<:ComponentData} = Component{T}()
 
 	eltype(::Type{Component{T}}) where T = T
 
@@ -176,6 +178,8 @@ module ECS
 	@inline empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
 
 	abstract type System end
+
+	update(::System, m::AbstractManager) = (@show "woops"; nothing)
 
 	requested_components(::System) = ()
 
@@ -283,6 +287,7 @@ module ECS
 		end
 		return v
 	end
+
 	push!(m::AbstractManager, sys::System) = push!(systems(m), sys)
 	insert!(m::AbstractManager, i::Int, sys::System) = insert!(systems(m), i, sys)
 
@@ -329,29 +334,43 @@ module ECS
 
 	function update_systems(m::AbstractManager)
 		for sys in systems(m)
-			sys(m)
+			update(sys, m)
 		end
 	end
 
 	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} =
 		any(x->eltype(x) == R, components(m))
 
-	function add_requested_components(m::AbstractManager, s::System)
-		for r in requested_components(s)
-			if !has_component(m, r)
-				Component{r}(m)
-			end
-		end
-	end
-	add_requested_components(m::AbstractManager) = map(x->add_requested_components(m, x), systems(m))
-
 	function prepare(m::AbstractManager)
 		for s in systems(m)
-			add_requested_components(m, s)
 			prepare(s, m)
 		end
 	end
 
 	prepare(::System, ::AbstractManager) = nothing
+
+	function generate_component_tuple(m::Manager, s::System)
+		current_components = components(m)
+		extra_components = []
+		for c in requested_components(s)
+			if !has_component(m, c)
+				push!(extra_components, preferred_component_type(c)(c))
+			end
+		end
+		return (current_components..., extra_components...)
+	end
+
+	function push_system(m::Manager, s::System)
+		current_systems = systems(m)
+		push!(current_systems, s)
+		return Manager(entities(m), free_entities(m), generate_component_tuple(m, s), current_systems)
+	end
+
+	function insert_system(m::Manager, id::Integer, s::System)
+		current_systems = systems(m)
+		insert!(current_systems, id, s)
+		return Manager(entities(m), free_entities(m), generate_component_tuple(m, s), current_systems)
+	end
+
 	include("iteration.jl")
 end
