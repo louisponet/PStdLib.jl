@@ -175,11 +175,11 @@ module ECS
 	@inline @propagate_inbounds setindex!(c::SharedComponent, v, e::Int) =
 		shared_data(c)[storage(c).data[e]] = v
 
-	@inline empty!(c::SharedComponent) = (empty!(c.data); empty!(c.shared))
+	@inline empty!(c::SharedComponent) = (empty!(storage(c)); empty!(c.shared))
 
 	abstract type System end
 
-	update(::System, m::AbstractManager) = (@show "woops"; nothing)
+	update(::S, m::AbstractManager) where {S<:System}= error("No update method implemented for $S")
 
 	requested_components(::System) = ()
 
@@ -323,7 +323,7 @@ module ECS
 	function empty!(m::AbstractManager)
 		empty!(entities(m))
 
-		for c in values(components(m))
+		for c in components(m)
 			empty!(c)
 		end
 	end
