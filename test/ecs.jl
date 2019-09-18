@@ -19,7 +19,9 @@ struct Oscillator <: System end
 
 ECS.requested_components(::Oscillator) = (Spatial, Spring)
 
-function (::Oscillator)(spat, spring)
+function ECS.update(::Oscillator, m::ECS.AbstractManager)
+	spat = m[Spatial]
+	spring = m[Spring]
 	it = zip(enumerate(spat), spring)
 	@inbounds for ((id1, e_spat), spr) in it
 		v_prev   = e_spat.v
@@ -29,7 +31,9 @@ function (::Oscillator)(spat, spring)
 	end
 end
 
-function (::Oscillator)(spat, spring, ::Val{:pointer})
+function ECS.update(::Oscillator, m::ECS.AbstractManager, ::Val{:pointer})
+	spat = m[Spatial]
+	spring = m[Spring]
 	@inbounds for (p_spat, p_spr) in pointer_zip(spat, spring)
 		e_spat = unsafe_load(p_spat)
 		spr = unsafe_load(p_spr)
@@ -61,7 +65,7 @@ for i = 1:3
 	ECS.update_systems(m)
 end
 for i = 1:2
-	O(m[Spatial], m[Spring], Val{:pointer}())
+	ECS.update(O, m, Val{:pointer}())
 end
 
 
@@ -76,6 +80,6 @@ for i = 1:3
 	ECS.update_systems(m)
 end
 for i = 1:2
-	O(m[Spatial], m[Spring], Val{:pointer}())
+	ECS.update(O, m, Val{:pointer}())
 end
 @test sum(map(x->m[Spatial, Entity(x)].p[1], 1:100)) == -5605.33
