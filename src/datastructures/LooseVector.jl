@@ -120,7 +120,7 @@ current_id(x::ZippedLooseIterator) = current_id(x.set_iterator)
 @inline iterfunc(data, i) = iterate(data, i)
 @inline iterfunc(data::Base.Enumerate, i::Integer) = iterate(data, (i,i))
 
-Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=0)
+Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=1)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
 	@inbounds map((x, y) -> iterfunc(y, x)[1], n[1], it.datas), n[2]
@@ -133,7 +133,7 @@ end
 
 pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
 
-Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=0)
+Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=1)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
 	map((x, y) -> pointer(y, x), n[1], it.datas), n[2]

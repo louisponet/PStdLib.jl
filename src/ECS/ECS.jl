@@ -163,7 +163,7 @@ module ECS
 
 	@inline @propagate_inbounds function setindex!(c::SharedComponent, v, e::Entity)
 		sd = shared_data(c)
-		datid = findfirst(x -> x === v, sd)
+		datid = findfirst(x -> x == v, sd)
 		if datid === nothing
 			push!(sd, v)
 			storage(c)[id(e)] = length(sd)

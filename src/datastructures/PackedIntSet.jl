@@ -77,13 +77,13 @@ end
 	isassigned(s.reverse, page) && @inbounds s.reverse[page][offset] != 0
 end
 
-@inline function Base.findfirst(i, s::PackedIntSet)
+@inline function Base.findfirst(i, s::PackedIntSet{T}) where {T<:Integer}
 	page, offset = page_offset(s, i)
 	if isassigned(s.reverse, page)
 		@inbounds id = s.reverse[page][offset]
 		return id
 	end
-	return 0
+	return zero(T)
 end
 
 @inline function Base.pop!(s::PackedIntSet)
@@ -140,20 +140,34 @@ Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)
 
 @inline Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
 
-Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=0)
-	state += 1
+in_excluded(id, it::ZippedPackedIntSetIterator{I,VT,Tuple{}}) where {I,VT} = false
+
+function in_excluded(id, it)
+	for e in it.excluded_sets
+		if id in e
+			return true
+		end
+	end
+	return false
+end
+
+@inline id_tids(it, state) = (id = it.shortest_set.packed[state]; return id, map(x -> findfirst(id, x), it.valid_sets))
+#TODO cleanup
+Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=1)
 	if state > length(it)
 		return nothing
 	end
+	id, tids = id_tids(it, state)
+	while !all(x -> x!=0, tids) || in_excluded(id, it)
+		state += 1
+		if state > length(it)
+			return nothing
+		end
 
-	id = it.shortest_set.packed[state]
-	tids = map(x -> findfirst(id, x), it.valid_sets)
-	if all(x -> x!=0, tids) && all(x->x==0, map(x->findfirst(id, x), it.excluded_sets))
-		it.current_id = id
-		return tids, state
-	else
-		return iterate(it, state)
+		id, tids = id_tids(it, state)
 	end
+	it.current_id = id
+	return tids, state + 1
 end
 
 current_id(x::ZippedPackedIntSetIterator) = x.current_id
