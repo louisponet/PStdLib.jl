@@ -51,6 +51,7 @@ module ECS
 		for d in datas
 			m[typeof(d), e] = d
 		end
+		return e
 	end
 
 	#TODO improve this
@@ -81,7 +82,7 @@ module ECS
 	@inline data(c::AbstractComponent)    = data(storage(c))
 	@inline data(c::Enumerate{<:AbstractComponent})    = enumerate(data(storage(c)))
 
-	@inline in(c::AbstractComponent, e::Entity) = in(id(e), storage(c))
+	@inline in(e::Entity, c::AbstractComponent) = in(id(e), storage(c))
 
 
 	isempty(c::AbstractComponent) = isempty(storage(c))
@@ -125,7 +126,7 @@ module ECS
 		DataStructures.PointerZippedLooseIterator(cs...)
 
 	#maybe this shouldn't be called remove_entity!
-	remove_entity!(c::AbstractComponent, e::Entity) =
+	pop!(c::AbstractComponent, e::Entity) =
 		pop!(storage(c), id(e))
 
 	preferred_component_type(::Type{<:ComponentData}) = Component

@@ -131,7 +131,7 @@ struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: Abstract
 	set_iterator::ZI
 end
 
-pointer_zip(s::LooseVector...) = PointerZippedLooseIterator(s...)
+pointer_zip(s...;kwargs...) = PointerZippedLooseIterator(s...;kwargs...)
 
 Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, state=1)
 	n = iterate(it.set_iterator, state)
