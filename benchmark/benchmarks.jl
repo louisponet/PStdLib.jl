@@ -2,7 +2,7 @@ using BenchmarkTools
 using PStdLib.DataStructures
 using Random
 
-rand_setup = () -> (
+rand_setup =  (
 	Random.seed!(1234);
 	ids1 = rand(1:30000, 1000);
 	ids2 = rand(1:30000, 1000);

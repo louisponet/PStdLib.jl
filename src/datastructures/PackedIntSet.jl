@@ -138,7 +138,7 @@ mutable struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
 	end
 end
 
-Base.zip(s::PackedIntSet...) = ZippedPackedIntSetIterator(s...)
+Base.zip(s::PackedIntSet...;kwargs...) = ZippedPackedIntSetIterator(s...;kwargs...)
 
 @inline Base.length(it::ZippedPackedIntSetIterator) = length(it.shortest_set)
 
