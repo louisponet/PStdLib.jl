@@ -184,10 +184,10 @@ module ECS
 
 	requested_components(::System) = ()
 
-	mutable struct Manager{C} <: AbstractManager
+	mutable struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
 		free_entities::Vector{Entity}
-		components   ::C
+		components   ::Dict{DataType, Union{Component,SharedComponent}}
 		systems      ::Vector{System}
 	end
 	Manager() = Manager(Entity[], Entity[], (), System[])
@@ -272,8 +272,8 @@ module ECS
 
 	function setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
-		if !has_component(m, T)
-			c = preferred_component_type(T){T}(m)
+		if !in(T, m)
+			c = preferred_component_type(T){T}()
 		else
 			c = m[T]
 		end
@@ -340,8 +340,8 @@ module ECS
 		end
 	end
 
-	has_component(m::AbstractManager, ::Type{R}) where {R<:ComponentData} =
-		any(x->eltype(x) == R, components(m))
+	Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
+		haskey(components(m), R)
 
 	function prepare(m::AbstractManager)
 		for s in systems(m)
@@ -355,7 +355,7 @@ module ECS
 		current_components = components(m)
 		extra_components = []
 		for c in requested_components(s)
-			if !has_component(m, c)
+			if !in(c, m)
 				push!(extra_components, preferred_component_type(c)(c))
 			end
 		end
