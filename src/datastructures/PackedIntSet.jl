@@ -125,6 +125,8 @@ function cleanup!(s::PackedIntSet{T}) where {T}
 end
 
 
+Base.iterate(s::PackedIntSet, args...) = iterate(s.packed, args...)
+
 mutable struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
 	current_id::I
 	valid_sets::VT
