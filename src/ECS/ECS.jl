@@ -247,8 +247,8 @@ module ECS
 		@assert es[e] != Entity(0) "$e was removed previously."
 	end
 
-	getindex(m::AbstractManager, ::Type{T})::Union{Component{T}, SharedComponent{T}} where {T<:ComponentData} =
-		components(m)[T]
+	getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
+		components(m)[T]::Union{Component{T}, SharedComponent{T}}
 
 	function getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		

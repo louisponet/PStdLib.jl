@@ -16,13 +16,7 @@ module Geometry
 	const Mat4{F}   = SMatrix{4, 4, F, 16}
 	const Mat4f0    = Mat4{Float32}
 	export Point, Point3, Vec3, Mat3, Mat4, Point3f0, Vec3f0, Mat3f0, Mat4f0
-
 	@export volume(m::Mat3) = det(m)
-	@generated function (::SArray{NTuple{N, T}, T, 1, N})(t) where {N,T}
-    	v = ()
-    	for i=1:N
-        	v = (
-	    SArray{NTuple{N, T}, T, 1, N}(
 
 	"""
 		reciprocal(cell::Mat3)
