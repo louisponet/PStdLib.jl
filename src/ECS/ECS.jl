@@ -192,7 +192,8 @@ module ECS
 	end
 	Manager() = Manager(Entity[], Entity[], (), System[])
 
-	Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], cs, System[])
+	# Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], cs, System[])
+	Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], Dict([eltype(x) => x for x in cs]), System[])
 	Manager(components::Type{<:ComponentData}...) = Manager(map(x->preferred_component_type(x){x}(), components)...)
 
 	function Manager(components::T, shared_components::T) where {T<:Union{NTuple{N,DataType} where N,AbstractVector{DataType}}}
@@ -246,7 +247,7 @@ module ECS
 		@assert es[e] != Entity(0) "$e was removed previously."
 	end
 
-	getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
+	getindex(m::AbstractManager, ::Type{T})::Union{Component{T}, SharedComponent{T}} where {T<:ComponentData} =
 		components(m)[T]
 
 	function getindex(m::AbstractManager, e::Entity)
