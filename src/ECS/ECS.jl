@@ -325,7 +325,7 @@ module ECS
 	function empty!(m::AbstractManager)
 		empty!(entities(m))
 
-		for c in components(m)
+		for (k, c) in components(m)
 			empty!(c)
 		end
 	end
