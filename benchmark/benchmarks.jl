@@ -1,5 +1,5 @@
 using BenchmarkTools
-using PStdLib.DataStructures
+using PStdLib.PDataStructures
 using Random
 
 rand_setup =  (
