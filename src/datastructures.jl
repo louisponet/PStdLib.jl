@@ -1,11 +1,10 @@
-module DataStructures
+module PDataStructures
+	using Reexport
+	@reexport using DataStructures
 	include("datastructures/TypedPage.jl")
-	include("datastructures/PackedIntSet.jl")
 	include("datastructures/GappedVector.jl")
 	include("datastructures/LooseVector.jl")
 	export TypedPage
-	export PackedIntSet
-	export packed_id
 	export GappedVector
 	export LooseVector
 	export pointer_zip

@@ -1,4 +1,4 @@
-Entity(x::DataStructures.ZippedLooseIterator) = Entity(DataStructures.current_id(x))
+Entity(x::PDataStructures.ZippedLooseIterator) = Entity(PDataStructures.current_id(x))
 
 Base.@propagate_inbounds Base.iterate(c::Component, args...) = iterate(data(c), args...) 
 
@@ -15,12 +15,12 @@ end
 @inline iterfunc(c::Enumerate{<:AbstractComponent}, i::Integer) = iterate(c, (i,i))
 @inline iterfunc(c::AbstractComponent, i::Integer) = iterate(c, i)
 
-function (::Type{T})(comps::EnumUnion{AbstractComponent}...;  exclude = ()) where {T<:DataStructures.AbstractZippedLooseIterator}
-	iterator = DataStructures.ZippedPackedIntSetIterator(map(x -> indices(x), comps)...; exclude=map(x->indices(x), exclude))
+function (::Type{T})(comps::EnumUnion{AbstractComponent}...;  exclude = ()) where {T<:PDataStructures.AbstractZippedLooseIterator}
+	iterator = DataStructures.ZippedSparseIntSetIterator(map(x -> indices(x), comps)...; exclude=map(x->indices(x), exclude))
 	T(comps, iterator)
 end
 
-Base.zip(cs::EnumUnion{AbstractComponent}...;kwargs...) = DataStructures.ZippedLooseIterator(cs...;kwargs...)
+Base.zip(cs::EnumUnion{AbstractComponent}...;kwargs...) = PDataStructures.ZippedLooseIterator(cs...;kwargs...)
 
 Base.@propagate_inbounds function Base.iterate(c::SharedComponent, state=1)
 	state > length(c) && return nothing

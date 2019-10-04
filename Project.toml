@@ -5,6 +5,7 @@ repo = "https://github.com/louisponet/PStdLib.jl.git"
 version = "0.0.0"
 
 [deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 InlineExports = "809d7502-0c9d-5bc2-962a-5201dc498f73"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"

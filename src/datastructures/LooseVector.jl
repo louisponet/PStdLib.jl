@@ -1,10 +1,12 @@
 import Base.Enumerate
+using DataStructures: ZippedSparseIntSetIterator
+using Base: @propagate_inbounds
 
 mutable struct LooseVector{T} <: AbstractVector{T}
-	indices::PackedIntSet{Int}
+	indices::SparseIntSet
 	data   ::Vector{T}
 	function LooseVector{T}(values::AbstractVector{T}) where {T}
-		set = PackedIntSet{Int}(1:length(values))
+		set = SparseIntSet(1:length(values))
 		return new{T}(set, values)
 	end
 end
@@ -17,9 +19,15 @@ LooseVector{T}() where {T} = LooseVector{T}(T[])
 @inline data(s::Enumerate{<:LooseVector}) = enumerate(s.itr.data)
 @inline indices(s::Enumerate{<:LooseVector}) = s.itr.indices
 
-@inline packed_id(s::LooseVector, i) = packed_id(s.indices, i)
+@inline function packed_id(s::LooseVector, i)
+	pageid, offset = DataStructures.pageid_offset(s.indices, i)
+	@boundscheck if !in(i, s)
+		throw(BoundsError(s, i))
+	end
+	return @inbounds s.indices.reverse[pageid][offset]
+end
 
-@inline reverse_id(s::LooseVector, i) = reverse_id(s.indices, i)
+@inline @propagate_inbounds reverse_id(s::LooseVector, i) = s.indices.packed[i]
 
 @inline Base.length(s::LooseVector) = length(s.data)
 @inline Base.size(s::LooseVector) = (length(s),)
@@ -102,13 +110,13 @@ abstract type AbstractZippedLooseIterator end
 
 function (::Type{T})(vecs::Union{LooseVector, Enumerate{<:LooseVector}}...; exclude = ()) where {T<:AbstractZippedLooseIterator}
 	datas = map(x->data(x), vecs)
-	iterator = ZippedPackedIntSetIterator(map(x -> indices(x), vecs)...;exclude=map(x->indices(x), exclude))
+	iterator = ZippedSparseIntSetIterator(map(x -> indices(x), vecs)...;exclude=map(x->indices(x), exclude))
 	T(datas, iterator)
 end
 
 @inline Base.length(it::AbstractZippedLooseIterator) = length(it.set_iterator)
 
-struct ZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
+struct ZippedLooseIterator{T, ZI<:ZippedSparseIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
 end
@@ -126,7 +134,7 @@ Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=1)
 	@inbounds map((x, y) -> iterfunc(y, x)[1], n[1], it.datas), n[2]
 end
 
-struct PointerZippedLooseIterator{T, ZI<:ZippedPackedIntSetIterator} <: AbstractZippedLooseIterator
+struct PointerZippedLooseIterator{T, ZI<:ZippedSparseIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
 end

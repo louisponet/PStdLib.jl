@@ -1,7 +1,7 @@
 module ECS
-	using ..DataStructures
-	import ..DataStructures: indices, data, iterfunc
-	using ..DataStructures: Direct, Reverse
+	using ..PDataStructures
+	import ..PDataStructures: indices, data, iterfunc
+	using ..PDataStructures: Direct, Reverse
 	using Base: Enumerate, @propagate_inbounds
 	import Base: getindex, setindex!, iterate, eltype, in, isempty, length,
 				 pointer, empty!, push!, insert!, deleteat!
@@ -119,11 +119,11 @@ module ECS
 
 	@inline empty!(c::Component) = empty!(storage(c))
 
-	DataStructures.pointer_zip(cs::Component...) =
+	PDataStructures.pointer_zip(cs::Component...) =
 		pointer_zip(storage.(cs)...)
 
-	DataStructures.pointer_zip(cs::AbstractComponent...) =
-		DataStructures.PointerZippedLooseIterator(cs...)
+	PDataStructures.pointer_zip(cs::AbstractComponent...) =
+		PDataStructures.PointerZippedLooseIterator(cs...)
 
 	#maybe this shouldn't be called remove_entity!
 	pop!(c::AbstractComponent, e::Entity) =

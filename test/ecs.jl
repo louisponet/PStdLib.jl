@@ -1,8 +1,8 @@
 #%%
 using PStdLib: ECS
-using PStdLib: DataStructures
+using PStdLib: PDataStructures
 import PStdLib.ECS: Manager, ComponentData, Component, Entity, System
-using PStdLib.DataStructures
+using PStdLib.PDataStructures
 using PStdLib.Geometry
 using PStdLib
 #%%

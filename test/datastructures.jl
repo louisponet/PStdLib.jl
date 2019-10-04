@@ -1,4 +1,4 @@
-using PStdLib.DataStructures
+using PStdLib.PDataStructures
 using PStdLib
 t = GappedVector{Int}([[1, 3, 4], [5, 6, 7]], [1, 20])
 @test t[1] == 1
@@ -30,8 +30,6 @@ for v_ in v
 	push!(vt, v_)
 end
 @test vt == 1:6
-
-
 const set1 = LooseVector{Int}()
 tids1 = unique(rand(1:900, 30))
 for i in tids1
@@ -57,46 +55,3 @@ for (i, (s1, s2)) in enumerate(zip(set1, set2))
 	global test_n += s1+s2
 end
 @test 2n == test_n
-
-# deleteat!(set1, tids1[23])
-# @test !in(tids[23], set1)
-
-tids = rand(1:10000, 3000)
-set = PackedIntSet(tids)
-
-@test length(set) == length(unique(tids))
-
-newid = getfirst(x->!in(x, tids), 1:1000)
-push!(set, newid)
-@test pop!(set) == newid
-@test pop!(set, tids[23]) == tids[23]
-
-
-pagelen = DataStructures.elements_per_page(Int)
-set     = PackedIntSet{Int}()
-push!(set, 1)
-push!(set, pagelen)
-@test length(set.reverse) == 1
-push!(set, pagelen + 1)
-@test length(set.reverse) == 2
-push!(set, 5*pagelen + 1)
-@test length(set.reverse) == 6
-
-mem = Base.summarysize(set)
-
-pop!(set, pagelen + 1)
-cleanup!(set)
-@test length(set.reverse) == 6
-pop!(set, 5*pagelen + 1)
-cleanup!(set)
-@test length(set.reverse) == 1
-@test Base.summarysize(set) < mem
-
-
-
-
-
-
-
-
-
