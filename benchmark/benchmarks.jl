@@ -1,5 +1,6 @@
 using BenchmarkTools
 using PStdLib.PDataStructures
+using PStdLib.PDataStructures.DataStructures
 using Random
 
 rand_setup =  (
@@ -14,6 +15,68 @@ end
 
 SUITE = BenchmarkGroup()
 
+SUITE["PackedIntSet"] = BenchmarkGroup()
+
+
+function create_fill_packed(ids1)
+	y = SparseIntSet()
+	for i in ids1
+		push!(y, i)
+	end
+end
+
+SUITE["PackedIntSet"]["create_fill"] =
+	@benchmarkable create_fill_packed(ids1) setup=rand_setup
+
+SUITE["PackedIntSet"]["in while not in"] =
+	@benchmarkable in(23, y) evals=1000 setup=(y = SparseIntSet();)
+SUITE["PackedIntSet"]["in while in"] =
+	@benchmarkable in(5199, y) evals=1000 setup=(y=SparseIntSet(); push!(y, 5199))
+
+function pop_push(y)
+	pop!(y, 5199)
+	push!(y, 5199)
+end
+
+SUITE["PackedIntSet"]["pop push"] = @benchmarkable pop_push(y) setup=(y=SparseIntSet(); push!(y, 5199);push!(y,5200))
+
+function iterate_one_bench(x)
+	t = 0
+	for i in x
+		t += i
+	end
+	return t
+end
+function iterate_two_bench(x,y)
+	t = 0
+	for (ix, iy) in zip(x, y)
+		t += ix + iy
+	end
+	return t
+end
+function iterate_two_exclude_one_bench(x,y,z)
+	t = 0
+	for (ix, iy) in zip(x, y, exclude=(z,))
+		t += ix + iy
+	end
+	return t
+end
+
+x_y_z_setup = (
+	Random.seed!(1234);
+	x = SparseIntSet(rand(1:30000, 1000));
+	y = SparseIntSet(rand(1:30000, 1000));
+	z = SparseIntSet(rand(1:30000, 1000));
+)
+
+SUITE["PackedIntSet"]["iterate one"] =
+	@benchmarkable iterate_one_bench(x) setup=x_y_z_setup
+
+SUITE["PackedIntSet"]["iterate two"] =
+	@benchmarkable iterate_two_bench(x,y) setup=x_y_z_setup
+
+SUITE["PackedIntSet"]["iterate two exclude one"] =
+	@benchmarkable iterate_two_exclude_one_bench(x,y,z) setup=x_y_z_setup
 
 #### ECS
 using PStdLib.ECS
