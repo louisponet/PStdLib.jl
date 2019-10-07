@@ -111,19 +111,20 @@ abstract type AbstractZippedLooseIterator end
 function (::Type{T})(vecs::Union{LooseVector, Enumerate{<:LooseVector}}...; exclude = ()) where {T<:AbstractZippedLooseIterator}
 	datas = map(x->data(x), vecs)
 	iterator = ZippedSparseIntSetIterator(map(x -> indices(x), vecs)...;exclude=map(x->indices(x), exclude))
-	T(datas, iterator)
+	T(datas, iterator, 0)
 end
 
 @inline Base.length(it::AbstractZippedLooseIterator) = length(it.set_iterator)
 
-struct ZippedLooseIterator{T, ZI<:ZippedSparseIntSetIterator} <: AbstractZippedLooseIterator
+mutable struct ZippedLooseIterator{T, ZI<:ZippedSparseIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
+	current_id::Int
 end
 
+current_id(x::ZippedLooseIterator) = x.current_id
 
 Base.zip(s::Union{Base.Enumerate{<:LooseVector}, LooseVector}...) = ZippedLooseIterator(s...)
-current_id(x::ZippedLooseIterator) = current_id(x.set_iterator)
 
 @inline iterfunc(data, i) = iterate(data, i)
 @inline iterfunc(data::Base.Enumerate, i::Integer) = iterate(data, (i,i))
@@ -131,12 +132,14 @@ current_id(x::ZippedLooseIterator) = current_id(x.set_iterator)
 Base.@propagate_inbounds function Base.iterate(it::ZippedLooseIterator, state=1)
 	n = iterate(it.set_iterator, state)
 	n === nothing && return n
+	it.current_id = reverse_id(it.datas[1],n[1][1])
 	@inbounds map((x, y) -> iterfunc(y, x)[1], n[1], it.datas), n[2]
 end
 
 struct PointerZippedLooseIterator{T, ZI<:ZippedSparseIntSetIterator} <: AbstractZippedLooseIterator
 	datas::T
 	set_iterator::ZI
+	current_id::Int
 end
 
 pointer_zip(s...;kwargs...) = PointerZippedLooseIterator(s...;kwargs...)

@@ -17,7 +17,7 @@ end
 
 function (::Type{T})(comps::EnumUnion{AbstractComponent}...;  exclude = ()) where {T<:PDataStructures.AbstractZippedLooseIterator}
 	iterator = DataStructures.ZippedSparseIntSetIterator(map(x -> indices(x), comps)...; exclude=map(x->indices(x), exclude))
-	T(comps, iterator)
+	T(comps, iterator, 0)
 end
 
 Base.zip(cs::EnumUnion{AbstractComponent}...;kwargs...) = PDataStructures.ZippedLooseIterator(cs...;kwargs...)

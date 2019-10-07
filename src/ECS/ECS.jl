@@ -60,8 +60,9 @@ module ECS
 
 	abstract type AbstractComponent{T<:ComponentData} end
 
-	Entity(c::AbstractComponent, i::Integer) = Entity(DataStructures.reverse_id(storage(c).indices,i))
-
+	Entity(c::AbstractComponent, i::Integer) = Entity(PDataStructures.reverse_id(storage(c),i))
+    PDataStructures.reverse_id(c::AbstractComponent, i::Integer) = PDataStructures.reverse_id(storage(c),i)
+    PDataStructures.reverse_id(c::Enumerate{<:AbstractComponent}, i::Integer) = PDataStructures.reverse_id(storage(c.itr),i)
 	#TODO use heterogenous storage maybe
 	const ComponentDict = Dict{Type{<:ComponentData}, AbstractComponent}
 
@@ -195,17 +196,6 @@ module ECS
 	# Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], cs, System[])
 	Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], Dict([eltype(x) => x for x in cs]), System[])
 	Manager(components::Type{<:ComponentData}...) = Manager(map(x->preferred_component_type(x){x}(), components)...)
-
-	function Manager(components::T, shared_components::T) where {T<:Union{NTuple{N,DataType} where N,AbstractVector{DataType}}}
-		comps = AbstractComponent[]
-		for c in components
-			push!(comps, Component{c}())
-		end
-		for c in shared_components
-			push!(comps, SharedComponent{c}())
-		end
-		return Manager(comps...)
-	end
 
 	function Manager(systems::System...)
 		comps = Type{<:ComponentData}[] 

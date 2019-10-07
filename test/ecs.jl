@@ -45,7 +45,6 @@ function ECS.update(::Oscillator, m::ECS.AbstractManager, ::Val{:pointer})
 end
 
 m = Manager(Spatial, Spring)
-
 function create_fill(m)
 	map(m, Spatial, Spring) do spat, spring
 		for i = 1:100
@@ -71,7 +70,9 @@ end
 
 @test sum(map(x->m[Spatial, Entity(x)].p[1], 1:100)) == -5605.33
 
-m = Manager((Spatial,), (Spring,))
+ECS.preferred_component_type(::Type{Spring}) = ECS.SharedComponent
+
+m = Manager(Spatial, Spring)
 create_fill(m)
 O = Oscillator()
 
