@@ -4,6 +4,8 @@ module PDataStructures
 	include("datastructures/TypedPage.jl")
 	include("datastructures/GappedVector.jl")
 	include("datastructures/LooseVector.jl")
+	include("datastructures/PackedIntSet.jl")
+	export PackedIntSet
 	export TypedPage
 	export GappedVector
 	export LooseVector

@@ -248,7 +248,7 @@ module ECS
 	end
 
 	getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
-		components(m)[T]::Union{Component{T}, SharedComponent{T}}
+		components(m)[T]::preferred_component_type(T){T}
 
 	function getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		
