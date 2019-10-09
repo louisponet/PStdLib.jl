@@ -1,6 +1,6 @@
 module ECS
 	using ..DataStructures
-	import ..DataStructures: indices, data, iterfunc
+	import ..DataStructures: indices, data
 	using ..DataStructures: Direct, Reverse
 	using Base: Enumerate, @propagate_inbounds
 	import Base: getindex, setindex!, iterate, eltype, in, isempty, length,
@@ -17,6 +17,7 @@ module ECS
 	export Manager
 	export manager
 	export insert_system, push_system
+	export entities
 
 	export update
 
@@ -118,12 +119,6 @@ module ECS
 	@inline @propagate_inbounds setindex!(c::Component, v, e::Int) = storage(c)[e, Direct()] = v
 
 	@inline empty!(c::Component) = empty!(storage(c))
-
-	DataStructures.pointer_zip(cs::Component...) =
-		pointer_zip(storage.(cs)...)
-
-	DataStructures.pointer_zip(cs::AbstractComponent...) =
-		DataStructures.PointerZippedLooseIterator(cs...)
 
 	#maybe this shouldn't be called remove_entity!
 	pop!(c::AbstractComponent, e::Entity) =
@@ -231,9 +226,9 @@ module ECS
 	@export valid_entities(m::AbstractManager) = filter(x -> x.id != 0, entities(m))
 	@export systems(m::AbstractManager)        = manager(m).systems
 
-	function all_components(::Type{T}, manager::AbstractManager) where {T<:ComponentData}
+	function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData}
 		comps = AbstractComponent[]
-		for c in components(manager)
+		for (k, c) in components(manager)
 			if eltype(c) <: T
 				push!(comps, c)
 			end
@@ -253,8 +248,8 @@ module ECS
 	function getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		
 		data = ComponentData[]
-		for c in components(m)
-			if has(c, e)
+		for (k, c) in components(m)
+			if in(e, c)
 				push!(data, c[e])
 			end
 		end
@@ -267,7 +262,7 @@ module ECS
 	#TODO: Performance
 	function getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
 		entity_assert(m, e)
-		return m[T][id(e)]
+		return m[T][e]
 	end
 
 	function setindex!(m::Manager, v, ::Type{T}, e::Entity) where {T<:ComponentData}
@@ -316,7 +311,7 @@ module ECS
 		push!(free_entities(m), e)
 		entities(m)[id(e)] = Entity(0)
 		for c in components(m)
-			if has(c, e)
+			if in(e, c)
 				remove_entity!(c, e)
 			end
 		end

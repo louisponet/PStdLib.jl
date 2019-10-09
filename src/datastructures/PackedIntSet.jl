@@ -127,14 +127,13 @@ end
 
 Base.iterate(s::PackedIntSet, args...) = iterate(s.packed, args...)
 
-mutable struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
-	current_id::I
+struct ZippedPackedIntSetIterator{I<:Integer,VT,IT}
 	valid_sets::VT
 	shortest_set::PackedIntSet{I}
 	excluded_sets::IT
 	function ZippedPackedIntSetIterator(valid_sets::PackedIntSet...;exclude::NTuple{N, PackedIntSet}=()) where{N}
 		shortest = valid_sets[findmin(map(x->length(x), valid_sets))[2]]
-		new{eltype(shortest), typeof(valid_sets), typeof(exclude)}(zero(eltype(shortest)), valid_sets, shortest, exclude)
+		new{eltype(shortest), typeof(valid_sets), typeof(exclude)}(valid_sets, shortest, exclude)
 	end
 end
 
@@ -153,23 +152,28 @@ function in_excluded(id, it)
 	return false
 end
 
+@inline function in_valid(id, it)
+    for e in it.valid_sets
+        if !in(id, e)
+            return false
+        end
+    end
+    return true
+end
+
 @inline id_tids(it, state) = (id = it.shortest_set.packed[state]; return id, map(x -> findfirst(id, x), it.valid_sets))
 #TODO cleanup
 Base.@propagate_inbounds function Base.iterate(it::ZippedPackedIntSetIterator, state=1)
-	if state > length(it)
+    itlen = length(it)
+	if state > itlen
 		return nothing
 	end
-	id, tids = id_tids(it, state)
-	while !all(x -> x!=0, tids) || in_excluded(id, it)
-		state += 1
-		if state > length(it)
-			return nothing
-		end
-
-		id, tids = id_tids(it, state)
+	for i in state:itlen
+    	@inbounds id = it.shortest_set.packed[i]
+    	if in_valid(id, it) && !in_excluded(id, it)
+        	return id, i+1
+    	end
 	end
-	it.current_id = id
-	return tids, state + 1
 end
 
 current_id(x::ZippedPackedIntSetIterator) = x.current_id
