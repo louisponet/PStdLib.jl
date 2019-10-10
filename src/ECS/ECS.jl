@@ -121,7 +121,7 @@ module ECS
 	@inline empty!(c::Component) = empty!(storage(c))
 
 	#maybe this shouldn't be called remove_entity!
-	pop!(c::AbstractComponent, e::Entity) =
+	Base.pop!(c::AbstractComponent, e::Entity) =
 		pop!(storage(c), id(e))
 
 	preferred_component_type(::Type{<:ComponentData}) = Component
@@ -306,13 +306,13 @@ module ECS
 
 	Entity(m::AbstractManager, i::Int) = i <= length(m.entities) ? m.entities[i] : Entity(m)
 
-	function remove_entity!(m::AbstractManager, e::Entity)
+	function Base.pop!(m::AbstractManager, e::Entity)
 		entity_assert(m, e)
 		push!(free_entities(m), e)
 		entities(m)[id(e)] = Entity(0)
-		for c in components(m)
+		for c in values(components(m))
 			if in(e, c)
-				remove_entity!(c, e)
+				pop!(c, e)
 			end
 		end
 	end
@@ -320,7 +320,7 @@ module ECS
 	function empty!(m::AbstractManager)
 		empty!(entities(m))
 
-		for (k, c) in components(m)
+		for c in values(components(m))
 			empty!(c)
 		end
 	end
