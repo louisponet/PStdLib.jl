@@ -7,17 +7,21 @@ module ECS
 				 pointer, empty!, push!, insert!, deleteat!
 	using InlineExports
 	import ..getfirst
-	import Base: == 
+	import Base: ==
+	#TODO Requires
+	using Parameters
 
 	export System
 	export SystemData
 	export ComponentData
 	export Component
+	export @component, @shared_component, @component_with_kw, @shared_component_with_kw
 	export Entity
 	export Manager
 	export manager
 	export insert_system, push_system
 	export entities
+
 
 	export update
 
@@ -46,6 +50,84 @@ module ECS
 	# Base.deleteat!(vec::AbstractVector, e::Entity) = deleteat!(vec, id(e))
 
 	abstract type ComponentData end
+	preferred_component_type(::Type{<:ComponentData}) = Component
+
+	const N_COMPONENTDATA_TYPES= Ref{Int}(0)
+
+    function typename(typedef::Expr)
+        if typedef.args[2] isa Symbol
+            return typedef.args[2]
+        elseif typedef.args[2].args[1] isa Symbol
+            return typedef.args[2].args[1]
+        elseif typedef.args[2].args[1].args[1] isa Symbol
+            return typedef.args[2].args[1].args[1]
+        else
+            error("Could not parse type-head from: $typedef")
+        end
+    end
+
+    component_id(::Type{<:ComponentData}) = -1
+
+    function process_typedef(typedef, mod, with_kw=false)
+    	tn = typename(typedef)
+        if typedef.args[2] isa Symbol
+        	typedef.args[2] = Expr(Symbol("<:"), tn, :ComponentData)
+        elseif typedef.args[2].head == Symbol("<:")
+            if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
+                error("Components can only have supertypes which are subtypes of ComponentData.")
+            end
+    	else
+        	error("Components can not have type parameters")
+        	# typ_pars = typedef.args[2].args[2:end]
+        	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
+    	end
+    	N_COMPONENTDATA_TYPES[] += 1
+    	id = N_COMPONENTDATA_TYPES[]
+        if with_kw
+            tq = quote
+            	ECS.Parameters.@with_kw $typedef
+            	ECS.component_id(::Type{$tn}) = $id
+            end
+        else
+            tq = quote
+            	$typedef
+            	ECS.component_id(::Type{$tn}) = $id
+            end
+        end
+
+    	return tq, tn
+	end
+
+	macro component(typedef)
+    	return esc(ECS._component(typedef, __module__))
+	end
+	macro component_with_kw(typedef)
+    	return esc(ECS._component(typedef, __module__, true))
+	end
+
+    function _component(typedef, mod::Module, args...)
+    	t, tn = process_typedef(typedef, mod, args...)
+    	quote
+    	    $t
+        	ECS.preferred_component_type(::Type{$tn}) = ECS.Component
+    	end
+	end
+
+	macro shared_component(typedef)
+    	return esc(ECS._shared_component(typedef, __module__))
+	end
+
+	macro shared_component_with_kw(typedef)
+    	return esc(ECS._shared_component(typedef, __module__, true))
+	end
+
+    function _shared_component(typedef, mod::Module, args...)
+    	t, tn = process_typedef(typedef, mod, args...)
+    	quote
+    	    $t
+        	ECS.preferred_component_type(::Type{$tn}) = ECS.SharedComponent
+    	end
+	end
 
 	function Entity(m::AbstractManager, datas::ComponentData...)
 		e = Entity(m)
@@ -107,6 +189,9 @@ module ECS
 	Component{T}() where {T<:ComponentData} = Component{T}(VECTORTYPE{T}())
 	Component(::Type{T}) where {T<:ComponentData} = Component{T}()
 
+    struct Stub <: ComponentData end
+    const EMPTY_COMPONENT = Component{Stub}()
+
 	eltype(::Type{Component{T}}) where T = T
 
 	@inline @propagate_inbounds getindex(c::Component, e::Entity) = storage(c)[id(e), Reverse()]
@@ -123,8 +208,6 @@ module ECS
 	#maybe this shouldn't be called remove_entity!
 	Base.pop!(c::AbstractComponent, e::Entity) =
 		pop!(storage(c), id(e))
-
-	preferred_component_type(::Type{<:ComponentData}) = Component
 
 
 	"""
@@ -182,13 +265,30 @@ module ECS
 	mutable struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
 		free_entities::Vector{Entity}
-		components   ::Dict{DataType, Union{Component,SharedComponent}}
+		components   ::Vector{Union{Component,SharedComponent}}
+		# components   ::Dict{DataType, Union{Component,SharedComponent}}
+
 		systems      ::Vector{System}
 	end
 	Manager() = Manager(Entity[], Entity[], (), System[])
 
 	# Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], cs, System[])
-	Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], Dict([eltype(x) => x for x in cs]), System[])
+	function Manager(cs::AbstractComponent...)
+    	maxid = maximum(map(x->component_id(eltype(x)), cs))
+
+    	comps = Vector{Union{Component, SharedComponent}}(undef, maxid)
+    	for c in cs
+        	comps[component_id(eltype(c))] = c
+    	end
+    	for i = 1:maxid
+        	if !isassigned(comps, i)
+            	comps[i] = EMPTY_COMPONENT
+        	end
+    	end
+    	return Manager(Entity[], Entity[], comps, System[])
+	end
+
+	# Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], Dict([eltype(x) => x for x in cs]), System[])
 	Manager(components::Type{<:ComponentData}...) = Manager(map(x->preferred_component_type(x){x}(), components)...)
 
 	function Manager(components::T, shared_components::T) where {T<:Union{NTuple{N,DataType} where N,AbstractVector{DataType}}}
@@ -228,7 +328,7 @@ module ECS
 
 	function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData}
 		comps = AbstractComponent[]
-		for (k, c) in components(manager)
+		for c in components(manager)
 			if eltype(c) <: T
 				push!(comps, c)
 			end
@@ -242,13 +342,15 @@ module ECS
 		@assert es[e] != Entity(0) "$e was removed previously."
 	end
 
-	getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData} =
-		components(m)[T]::preferred_component_type(T){T} 
+	function getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData}
+    	id = component_id(T)
+    	return components(m)[id]::preferred_component_type(T){T}
+	end
 
 	function getindex(m::AbstractManager, e::Entity)
 		entity_assert(m, e)		
 		data = ComponentData[]
-		for (k, c) in components(m)
+		for c in components(m)
 			if in(e, c)
 				push!(data, c[e])
 			end
@@ -272,7 +374,6 @@ module ECS
 		else
 			c = m[T]
 		end
-
 		return c[e] = v
 	end
 
@@ -310,7 +411,7 @@ module ECS
 		entity_assert(m, e)
 		push!(free_entities(m), e)
 		entities(m)[id(e)] = Entity(0)
-		for c in values(components(m))
+		for c in components(m)
 			if in(e, c)
 				pop!(c, e)
 			end
@@ -320,7 +421,7 @@ module ECS
 	function empty!(m::AbstractManager)
 		empty!(entities(m))
 
-		for c in values(components(m))
+		for c in components(m)
 			empty!(c)
 		end
 	end
@@ -336,7 +437,7 @@ module ECS
 	end
 
 	Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
-		haskey(components(m), R)
+		components(m)[component_id(R)] !== EMPTY_COMPONENT
 
 	function prepare(m::AbstractManager)
 		for s in systems(m)

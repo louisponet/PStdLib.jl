@@ -1,4 +1,4 @@
-elements_per_page(::Type{T}) where {T} = div(PAGESIZE, sizeof(T))
+elements_per_page(::Type{T}) where {T} = 512
 struct TypedPage{T}
 	data::Vector{T}
 	function TypedPage{T}() where {T}
