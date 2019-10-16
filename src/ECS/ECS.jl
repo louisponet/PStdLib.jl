@@ -267,7 +267,6 @@ module ECS
     function Base.pop!(c::SharedComponent, e::Entity)
         idvec = storage(c)
         i = pop!(idvec, id(e))
-        @show length(idvec)
         val = c.shared[i]
         if !any(isequal(i), idvec)
             for j in 1:length(idvec)
