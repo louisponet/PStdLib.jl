@@ -264,7 +264,21 @@ module ECS
 
 	@inline empty!(c::SharedComponent) = (empty!(storage(c)); empty!(c.shared))
 
-
+    function Base.pop!(c::SharedComponent, e::Entity)
+        idvec = storage(c)
+        i = pop!(idvec, id(e))
+        @show length(idvec)
+        val = c.shared[i]
+        if !any(isequal(i), idvec)
+            for j in 1:length(idvec)
+                if idvec[j, Direct()] > i
+                    idvec[j, Direct()] -= 1
+                end
+            end
+            deleteat!(c.shared, i)
+        end
+        return val
+    end
 
 	abstract type System end
 
