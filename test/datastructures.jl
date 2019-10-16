@@ -50,13 +50,11 @@ end
 
 n = (23+55) * length(intersect(tids1, tids2))
 test_n = 0
-for (s1, s2) in zip(set1, set2)
-	global test_n += s1+s2
+for id in zip(set1.indices, set2.indices)
+	global test_n += set1[id]+set2[id]
 end
-for (i, (s1, s2)) in enumerate(zip(set1, set2))
-	global test_n += s1+s2
-end
-@test 2n == test_n
+
+@test n == test_n
 
 # deleteat!(set1, tids1[23])
 # @test !in(tids[23], set1)
