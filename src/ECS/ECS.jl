@@ -14,7 +14,6 @@ module ECS
 	export System, SystemStage
 	export ComponentData
 	export Component, SharedComponent
-	export @component, @shared_component, @component_with_kw, @shared_component_with_kw
 	export Entity
 	export Manager, AbstractManager
 	export manager
@@ -53,8 +52,6 @@ module ECS
 	abstract type ComponentData end
 	preferred_component_type(::Type{<:ComponentData}) = Component
 
-	const N_COMPONENTDATA_TYPES= Ref{Int}(0)
-
     function typename(typedef::Expr)
         if typedef.args[2] isa Symbol
             return typedef.args[2]
@@ -69,66 +66,6 @@ module ECS
 
     component_id(::Type{<:ComponentData}) = -1
 
-    function process_typedef(typedef, mod, with_kw=false)
-    	tn = typename(typedef)
-        if typedef.args[2] isa Symbol
-        	typedef.args[2] = Expr(Symbol("<:"), tn, :ComponentData)
-        elseif typedef.args[2].head == Symbol("<:")
-            if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
-                error("Components can only have supertypes which are subtypes of ComponentData.")
-            end
-    	else
-        	error("Components can not have type parameters")
-        	# typ_pars = typedef.args[2].args[2:end]
-        	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
-    	end
-    	N_COMPONENTDATA_TYPES[] += 1
-    	id = N_COMPONENTDATA_TYPES[]
-        if with_kw
-            tq = quote
-            	ECS.Parameters.@with_kw $typedef
-            	ECS.component_id(::Type{$tn}) = $id
-            end
-        else
-            tq = quote
-            	$typedef
-            	ECS.component_id(::Type{$tn}) = $id
-            end
-        end
-
-    	return tq, tn
-	end
-
-	macro component(typedef)
-    	return esc(ECS._component(typedef, __module__))
-	end
-	macro component_with_kw(typedef)
-    	return esc(ECS._component(typedef, __module__, true))
-	end
-
-    function _component(typedef, mod::Module, args...)
-    	t, tn = process_typedef(typedef, mod, args...)
-    	quote
-    	    $t
-        	ECS.preferred_component_type(::Type{$tn}) = ECS.Component
-    	end
-	end
-
-	macro shared_component(typedef)
-    	return esc(ECS._shared_component(typedef, __module__))
-	end
-
-	macro shared_component_with_kw(typedef)
-    	return esc(ECS._shared_component(typedef, __module__, true))
-	end
-
-    function _shared_component(typedef, mod::Module, args...)
-    	t, tn = process_typedef(typedef, mod, args...)
-    	quote
-    	    $t
-        	ECS.preferred_component_type(::Type{$tn}) = ECS.SharedComponent
-    	end
-	end
 
 	function Entity(m::AbstractManager, datas::ComponentData...)
 		e = Entity(m)
@@ -287,6 +224,19 @@ module ECS
 
     const SystemStage = Pair{Symbol, Vector{<:System}}
 
+    Base.push!(s::SystemStage, sys) = push!(last(s), sys)
+
+    function requested_components(stage::SystemStage)
+        comps = Type{<:ComponentData}[]
+		for s in last(stage)
+			for c in requested_components(s)
+				push!(comps, c)
+			end
+		end
+		return comps
+	end
+
+
 	mutable struct Manager <: AbstractManager
 		entities     ::Vector{Entity}
 		free_entities::Vector{Entity}
@@ -328,12 +278,8 @@ module ECS
 
 	function Manager(system_stages::SystemStage...)
 		comps = Type{<:ComponentData}[] 
-		for (v, stage) in system_stages
-    		for s in stage
-    			for c in requested_components(s)
-    				push!(comps, c)
-    			end
-			end
+		for stage in system_stages
+    		append!(comps, requested_components(stage)) 
 		end
 		m = Manager(comps...)
 		m.system_stages=[system_stages...]
@@ -424,9 +370,39 @@ module ECS
 		return v
 	end
 
-    push!(m::AbstractManager, stage::SystemStage) = push!(system_stages(m), stage)
-	push!(m::AbstractManager, stage::Symbol, sys::System) = push!(system_stage(m, stage), sys) 
-	insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System) = insert!(system_stage(m, stage), i, sys)
+    function Base.append!(m::AbstractManager, comps)
+        m_comps = components(m)
+        for c in comps
+            id = component_id(c)
+            while id > length(m_comps)
+                push!(m_comps, EMPTY_COMPONENT)
+            end
+            if !(c in m)
+                comp = preferred_component_type(c){c}()
+                m_comps[id] = comp
+            end
+        end
+        return m_comps
+    end
+    
+    function push!(m::AbstractManager, stage::SystemStage)
+        comps = requested_components(stage)
+        append!(m, comps)
+        push!(system_stages(m), stage)
+    end
+
+	function push!(m::AbstractManager, stage::Symbol, sys::System)
+    	stage = system_stage(m, stage) 
+        comps = requested_components(sys)
+        append!(m, comps)
+    	push!(stage, sys)
+	end
+
+	function insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System)
+    	insert!(system_stage(m, stage), i, sys)
+        comps = requested_components(sys)
+        append!(m, comps)
+    end
 
 	# function insert!(m::AbstractManager, ::Type{T}, sys::System, after=true) where {T<:System}
 	# 	id = findfirst(x -> isa(x, T), systems(m))
@@ -540,4 +516,87 @@ module ECS
 	end
 
 	include("iteration.jl")
+
+    macro define_component_creation_macros()
+        mod = __module__
+        esc(quote
+
+            const N_COMPONENTDATA_TYPES = Ref{Int}(0)
+            const COMPONENTDATA_TYPES = Symbol[]
+
+            function process_typedef(typedef, mod, with_kw=false)
+            	tn = ECS.typename(typedef)
+            	ctypes = COMPONENTDATA_TYPES
+            	if !(tn in ctypes)
+                	push!(ctypes, tn)
+                    if typedef.args[2] isa Symbol
+                    	typedef.args[2] = Expr(Symbol("<:"), tn, :ComponentData)
+                    elseif typedef.args[2].head == Symbol("<:")
+                        if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
+                            error("Components can only have supertypes which are subtypes of ComponentData.")
+                        end
+                	else
+                    	error("Components can not have type parameters")
+                    	# typ_pars = typedef.args[2].args[2:end]
+                    	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
+                	end
+                	N_COMPONENTDATA_TYPES[] += 1
+                	id = N_COMPONENTDATA_TYPES[]
+                    if with_kw
+                        tq = quote
+                        	ECS.Parameters.@with_kw $typedef
+                        	ECS.component_id(::Type{$tn}) = $id
+                        end
+                    else
+                        tq = quote
+                        	$typedef
+                        	ECS.component_id(::Type{$tn}) = $id
+                        end
+                    end
+                	return tq, tn
+                end
+        	end
+
+        	macro component(typedef)
+            	return esc($mod._component(typedef, __module__))
+        	end
+        	macro component_with_kw(typedef)
+            	return esc($mod._component(typedef, __module__, true))
+        	end
+
+            function _component(typedef, mod::Module, args...)
+                t = process_typedef(typedef, mod, args...)
+                if t !== nothing
+                	t1, tn = t 
+                	return quote
+                	    $t1
+                    	ECS.preferred_component_type(::Type{$tn}) = ECS.Component
+                	end
+            	end
+        	end
+
+        	macro shared_component(typedef)
+            	return esc($mod._shared_component(typedef, __module__))
+        	end
+
+        	macro shared_component_with_kw(typedef)
+            	return esc($mod._shared_component(typedef, __module__, true))
+        	end
+
+            function _shared_component(typedef, mod::Module, args...)
+                t = process_typedef(typedef, mod, args...)
+                if t !== nothing
+                	t1, tn = t 
+                	return quote
+                	    $t1
+                    	ECS.preferred_component_type(::Type{$tn}) = ECS.SharedComponent
+                	end
+            	end
+        	end
+        	export @component, @shared_component, @component_with_kw, @shared_component_with_kw
+    	end)
+    end
+
+    export @define_component_creation_macros
+
 end
