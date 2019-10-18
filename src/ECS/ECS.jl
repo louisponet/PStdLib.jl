@@ -18,12 +18,84 @@ module ECS
 	export Manager, AbstractManager
 	export manager
 	export insert_system, push_system, update_systems
+	export @component, @shared_component, @component_with_kw, @shared_component_with_kw
 	export entities
 
 	export schedule_delete!, delete_scheduled!
 
 
 	export update
+
+    const COMPONENTDATA_TYPES = Symbol[]
+
+    function process_typedef(typedef, mod, with_kw=false)
+    	tn = ECS.typename(typedef)
+    	ctypes = COMPONENTDATA_TYPES
+    	if !(tn in ctypes)
+        	push!(ctypes, tn)
+            if typedef.args[2] isa Symbol
+            	typedef.args[2] = Expr(Symbol("<:"), tn, :ComponentData)
+            elseif typedef.args[2].head == Symbol("<:")
+                if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
+                    error("Components can only have supertypes which are subtypes of ComponentData.")
+                end
+        	else
+            	error("Components can not have type parameters")
+            	# typ_pars = typedef.args[2].args[2:end]
+            	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
+        	end
+        	id = length(COMPONENTDATA_TYPES)
+            if with_kw
+                tq = quote
+                	ECS.Parameters.@with_kw $typedef
+                	ECS.component_id(::Type{$tn}) = $id
+                end
+            else
+                tq = quote
+                	$typedef
+                	ECS.component_id(::Type{$tn}) = $id
+                end
+            end
+        	return tq, tn
+        end
+    end
+
+    macro component(typedef)
+    	return esc(ECS._component(typedef, __module__))
+    end
+    macro component_with_kw(typedef)
+    	return esc(ECS._component(typedef, __module__, true))
+    end
+
+    function _component(typedef, mod::Module, args...)
+        t = process_typedef(typedef, mod, args...)
+        if t !== nothing
+        	t1, tn = t 
+        	return quote
+        	    $t1
+            	ECS.preferred_component_type(::Type{$tn}) = ECS.Component
+        	end
+    	end
+    end
+
+    macro shared_component(typedef)
+    	return esc(ECS._shared_component(typedef, __module__))
+    end
+
+    macro shared_component_with_kw(typedef)
+    	return esc(ECS._shared_component(typedef, __module__, true))
+    end
+
+    function _shared_component(typedef, mod::Module, args...)
+        t = process_typedef(typedef, mod, args...)
+        if t !== nothing
+        	t1, tn = t 
+        	return quote
+        	    $t1
+            	ECS.preferred_component_type(::Type{$tn}) = ECS.SharedComponent
+        	end
+    	end
+    end
 
 	const VECTORTYPE = LooseVector
 	abstract type AbstractManager end
@@ -521,79 +593,7 @@ module ECS
         mod = __module__
         esc(quote
 
-            const N_COMPONENTDATA_TYPES = Ref{Int}(0)
-            const COMPONENTDATA_TYPES = Symbol[]
 
-            function process_typedef(typedef, mod, with_kw=false)
-            	tn = ECS.typename(typedef)
-            	ctypes = COMPONENTDATA_TYPES
-            	if !(tn in ctypes)
-                	push!(ctypes, tn)
-                    if typedef.args[2] isa Symbol
-                    	typedef.args[2] = Expr(Symbol("<:"), tn, :ComponentData)
-                    elseif typedef.args[2].head == Symbol("<:")
-                        if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
-                            error("Components can only have supertypes which are subtypes of ComponentData.")
-                        end
-                	else
-                    	error("Components can not have type parameters")
-                    	# typ_pars = typedef.args[2].args[2:end]
-                    	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
-                	end
-                	N_COMPONENTDATA_TYPES[] += 1
-                	id = N_COMPONENTDATA_TYPES[]
-                    if with_kw
-                        tq = quote
-                        	ECS.Parameters.@with_kw $typedef
-                        	ECS.component_id(::Type{$tn}) = $id
-                        end
-                    else
-                        tq = quote
-                        	$typedef
-                        	ECS.component_id(::Type{$tn}) = $id
-                        end
-                    end
-                	return tq, tn
-                end
-        	end
-
-        	macro component(typedef)
-            	return esc($mod._component(typedef, __module__))
-        	end
-        	macro component_with_kw(typedef)
-            	return esc($mod._component(typedef, __module__, true))
-        	end
-
-            function _component(typedef, mod::Module, args...)
-                t = process_typedef(typedef, mod, args...)
-                if t !== nothing
-                	t1, tn = t 
-                	return quote
-                	    $t1
-                    	ECS.preferred_component_type(::Type{$tn}) = ECS.Component
-                	end
-            	end
-        	end
-
-        	macro shared_component(typedef)
-            	return esc($mod._shared_component(typedef, __module__))
-        	end
-
-        	macro shared_component_with_kw(typedef)
-            	return esc($mod._shared_component(typedef, __module__, true))
-        	end
-
-            function _shared_component(typedef, mod::Module, args...)
-                t = process_typedef(typedef, mod, args...)
-                if t !== nothing
-                	t1, tn = t 
-                	return quote
-                	    $t1
-                    	ECS.preferred_component_type(::Type{$tn}) = ECS.SharedComponent
-                	end
-            	end
-        	end
-        	export @component, @shared_component, @component_with_kw, @shared_component_with_kw
     	end)
     end
 
