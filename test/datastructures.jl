@@ -1,4 +1,4 @@
-using PStdLib.PDataStructures
+using PStdLib.DataStructures
 using PStdLib
 t = GappedVector{Int}([[1, 3, 4], [5, 6, 7]], [1, 20])
 @test t[1] == 1
@@ -30,6 +30,8 @@ for v_ in v
 	push!(vt, v_)
 end
 @test vt == 1:6
+
+
 const set1 = LooseVector{Int}()
 tids1 = unique(rand(1:900, 30))
 for i in tids1
@@ -51,10 +53,3 @@ test_n = 0
 for id in zip(set1.indices, set2.indices)
 	global test_n += set1[id]+set2[id]
 end
-<<<<<<< HEAD
-for (i, (s1, s2)) in enumerate(zip(set1, set2))
-	global test_n += s1+s2
-end
-@test 2n == test_n
-=======
->>>>>>> PackedIntSet
