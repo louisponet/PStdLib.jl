@@ -104,6 +104,7 @@ end
 @inline Base.isempty(s::LooseVector) = isempty(s.data)
 
 Base.mapreduce(f, op, A::LooseVector; kwargs...) =
+<<<<<<< HEAD
 	mapreduce(f, op, view(A.data, 1:length(A)); kwargs...) 
 
 abstract type AbstractZippedLooseIterator end
@@ -149,3 +150,6 @@ Base.@propagate_inbounds function Base.iterate(it::PointerZippedLooseIterator, s
 	n === nothing && return n
 	map((x, y) -> pointer(y, x), n[1], it.datas), n[2]
 end
+=======
+	mapreduce(f, op, view(A.data, 1:length(A)); kwargs...)
+>>>>>>> PackedIntSet

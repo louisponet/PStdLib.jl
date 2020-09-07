@@ -4,13 +4,16 @@ module PDataStructures
 	include("datastructures/TypedPage.jl")
 	include("datastructures/GappedVector.jl")
 	include("datastructures/LooseVector.jl")
+<<<<<<< HEAD
 	include("datastructures/PackedIntSet.jl")
 	export PackedIntSet
 	export TypedPage
+=======
+	export TypedPage
+	export packed_id
+>>>>>>> PackedIntSet
 	export GappedVector
 	export LooseVector
-	export pointer_zip
-	export cleanup!
 
 	const PAGESIZE = 0
 	function __init__()
