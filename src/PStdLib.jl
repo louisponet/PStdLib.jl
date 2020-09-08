@@ -11,7 +11,7 @@ module PStdLib
 	include("ThreadCaches.jl")
 	include("BLASCaches.jl")
 	include("datastructures.jl")
-	include("ECS/ECS.jl")
+	include("images.jl")
 	#general Utility functions
 	"Like `joinpath(homedir(), args...)`"
 	@export homepath(args...) =

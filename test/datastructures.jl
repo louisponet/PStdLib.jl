@@ -1,4 +1,4 @@
-using PStdLib.DataStructures
+using PStdLib.PDataStructures
 using PStdLib
 t = GappedVector{Int}([[1, 3, 4], [5, 6, 7]], [1, 20])
 @test t[1] == 1
@@ -50,6 +50,6 @@ end
 
 n = (23+55) * length(intersect(tids1, tids2))
 test_n = 0
-for id in zip(set1.indices, set2.indices)
-	global test_n += set1[id]+set2[id]
-end
+# for id in zip(set1.indices, set2.indices)
+# 	global test_n += set1[id[1]]+set2[id[2]]
+# end
