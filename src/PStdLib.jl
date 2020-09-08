@@ -6,6 +6,17 @@ module PStdLib
 	include("Geometry.jl")
 	include("Physics.jl")
 	include("array.jl")
+	export fillcopy,
+	       norm2,
+	       getfirst,
+	       separate!,
+	       separate,
+	       separateperm!,
+	       separateperm,
+	       fillcopy,
+	       findclosest,
+	       getclosest
+	       
 	include("string.jl")
 	include("math.jl")
 	include("ThreadCaches.jl")
